@@ -1,8 +1,14 @@
 """Scores -> factor-hedged stock weights. Training and backtesting both call this.
 
-    1. residual space:  center scores over tradable stocks, L1-normalize -> w
-    2. stock space:     x = Phi^T w   (holding residual i = stock i minus its factor hedge)
-    3. constraints:     zero untradable names, gross exposure 1, single-name cap
+    1. residual positions:  w = s / sum|s| over tradable stocks, each clipped to |w_i| <= cap
+    2. stock weights:       x = Phi^T w, rescaled so that sum|x| = sum|w|
+
+Each w_i is a hedged bet (long stock i, short its factor exposure), so the
+book is a sum of hedged bets. The position limit is applied to w, before the
+mapping: clipping x afterwards would cut a stock leg but keep its hedge legs,
+leaving the portfolio exposed to the market (a trained model found and used
+exactly that gap). Clipped weight is not redistributed, so a concentrated
+signal gives a smaller book rather than inflating every other position.
 """
 
 import torch
@@ -17,12 +23,13 @@ def build_weights(scores: torch.Tensor, phi: torch.Tensor, tradable: torch.Tenso
         tradable: (T, N) bool
 
     Returns:
-        x: (T, N) stock weights; sum |x| = 1 unless nothing is tradable, |x| <= cap
+        x: (T, N) stock weights; gross sum|x| <= 1 (exactly 1 when no position hits the cap)
     """
     m = tradable.to(scores.dtype)
     s = scores * m
-    s = s - m * s.sum(-1, keepdim=True) / m.sum(-1, keepdim=True).clamp_min(1.0)
     w = s / s.abs().sum(-1, keepdim=True).clamp_min(eps)
+    if cap is not None:
+        w = w.clamp(-cap, cap)
 
     # x_j = sum_i Phi_ij w_i
     if phi.dim() == 2:
@@ -30,15 +37,8 @@ def build_weights(scores: torch.Tensor, phi: torch.Tensor, tradable: torch.Tenso
     else:
         x = torch.einsum("tij,ti->tj", phi, w)
     x = x * m
-    x = x / x.abs().sum(-1, keepdim=True).clamp_min(eps)
-
-    if cap is not None:
-        # clip and renormalize until the cap holds; ends on a clip so |x| <= cap exactly
-        for _ in range(10):
-            x = x.clamp(-cap, cap)
-            x = x / x.abs().sum(-1, keepdim=True).clamp_min(eps)
-        x = x.clamp(-cap, cap)
-    return x
+    # rescaling keeps the hedge; the stock book is as large as the residual book
+    return x * (w.abs().sum(-1, keepdim=True) / x.abs().sum(-1, keepdim=True).clamp_min(eps))
 
 
 def to_global(x: torch.Tensor, universe: torch.Tensor, n_tickers: int) -> torch.Tensor:
