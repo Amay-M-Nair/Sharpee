@@ -14,6 +14,10 @@ def test_sharpe_of_constant_series_is_zero():
     assert sharpe(np.zeros(10)) == 0.0
 
 
+def test_sharpe_of_broken_series_is_nan():
+    assert np.isnan(sharpe([0.01, np.nan, 0.02]))
+
+
 def test_max_drawdown_hand_value():
     # equity 1.1, 0.55, 0.66: worst fall is from 1.1 to 0.55
     assert np.isclose(max_drawdown([0.1, -0.5, 0.2]), -0.5)

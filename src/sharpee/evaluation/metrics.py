@@ -7,8 +7,13 @@ PERIODS = 252
 
 
 def sharpe(r) -> float:
-    """Annualized mean / std of daily returns. R_net is already an excess return."""
+    """Annualized mean / std of daily returns. R_net is already an excess return.
+
+    NaN in, NaN out: a broken return series must not look like a flat one.
+    """
     r = np.asarray(r, dtype=np.float64)
+    if not np.all(np.isfinite(r)):
+        return float("nan")
     sd = r.std(ddof=1) if len(r) > 1 else 0.0
     return float(r.mean() / sd * np.sqrt(PERIODS)) if sd > 0 else 0.0
 
