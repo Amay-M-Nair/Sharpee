@@ -18,22 +18,33 @@ def test_gross_one_and_untradable_zero():
 
 def test_identity_phi_gives_normalized_scores():
     scores = torch.tensor([[3.0, 1.0, -1.0, 1.0]])
-    x = build_weights(scores, torch.eye(4), torch.ones(1, 4, dtype=torch.bool), cap=None)
-    assert torch.allclose(x, scores / scores.abs().sum())
+    ones = torch.ones(1, 4, dtype=torch.bool)
+    centered = scores - scores.mean()
+    assert torch.allclose(build_weights(scores, torch.eye(4), ones, cap=None), centered / centered.abs().sum())
+    assert torch.allclose(build_weights(scores, torch.eye(4), ones, cap=None, center=False),
+                          scores / scores.abs().sum())
+
+
+def test_constant_model_output_holds_nothing():
+    """Without centering, a constant score is an equal-weight basket of every residual; a model
+    collapsed onto that bet during training. Centered, a constant score must mean no position."""
+    x = build_weights(torch.full((2, 10), 0.7), torch.eye(10), torch.ones(2, 10, dtype=torch.bool))
+    assert torch.all(x == 0)
 
 
 def test_x_is_phi_transpose_w():
     torch.manual_seed(1)
     scores, phi = torch.randn(1, 6), torch.randn(6, 6)
     x = build_weights(scores, phi, torch.ones(1, 6, dtype=torch.bool), cap=None)
-    w = scores / scores.abs().sum()
+    w = scores - scores.mean()
+    w = w / w.abs().sum()
     expected = phi.T @ w[0]
     assert torch.allclose(x[0], expected / expected.abs().sum(), atol=1e-6)
 
 
 def test_cap_limits_each_bet_without_reinflating_the_rest():
     scores = torch.tensor([[10.0, 1.0, -1.0, 0.5] + [0.0] * 96])
-    x = build_weights(scores, torch.eye(100), torch.ones(1, 100, dtype=torch.bool), cap=0.02)
+    x = build_weights(scores, torch.eye(100), torch.ones(1, 100, dtype=torch.bool), cap=0.02, center=False)
     w = scores / scores.abs().sum()
     assert torch.allclose(x, w.clamp(-0.02, 0.02))  # nothing is pushed into the zero-score names
     assert x.abs().sum() < 1.0

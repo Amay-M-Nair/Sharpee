@@ -38,7 +38,7 @@ def tune(panel, cfg):
         params = {"window": cfg["window"], "entry": entry, "exit_short": cfg["exit_short"],
                   "exit_long": cfg["exit_long"], "kappa_min": cfg["kappa_min"]}
         pos = ou_positions(panel, all_idx, **params)
-        frame = run_backtest(panel, val, pos[val], cost_bps=cfg["cost_bps"], cap=cfg["cap"])
+        frame = run_backtest(panel, val, pos[val], cost_bps=cfg["cost_bps"], cap=cfg["cap"], center=False)
         trial_id = log_trial(runs_dir(cfg), "ou", fold.name, params, frame["net"])
         s = sharpe(frame["net"])
         print(f"entry {entry:.2f}: val net Sharpe {s:+.2f}, gross {sharpe(frame['gross']):+.2f}, "
@@ -82,13 +82,13 @@ def main():
     rows, frames = [], {}
     for cost in cfg["cost_grid"]:
         for delay in (0, 1):
-            f = run_backtest(panel, period, pos[period], cost_bps=cost, delay=delay, cap=cfg["cap"])
+            f = run_backtest(panel, period, pos[period], cost_bps=cost, delay=delay, cap=cfg["cap"], center=False)
             rows.append({"strategy": "ou", "period": f"{years[0]}-{years[-1]}", "cost_bps": cost,
                          "delay": delay, **summarize(f)})
             frames[(cost, delay)] = f
     for y in years:
         idx = panel.index_of(f"{y}-01-01", f"{y}-12-31")
-        f = run_backtest(panel, idx, pos[idx], cost_bps=cfg["cost_bps"], cap=cfg["cap"])
+        f = run_backtest(panel, idx, pos[idx], cost_bps=cfg["cost_bps"], cap=cfg["cap"], center=False)
         rows.append({"strategy": "ou", "period": str(y), "cost_bps": cfg["cost_bps"], "delay": 0,
                      **summarize(f)})
 

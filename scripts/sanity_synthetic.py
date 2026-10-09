@@ -51,8 +51,9 @@ def run(ar, with_models, device):
     if with_models:
         for name in MODELS:
             out[name] = scores_for(name, panel, train, val, test, device)
-    return {k: (sharpe(run_backtest(panel, test, s, cost_bps=0)["net"]),
-                sharpe(run_backtest(panel, test, s, cost_bps=5)["net"])) for k, s in out.items()}
+    # OU's +1/-1 positions are rule-based and not centered; model scores are
+    return {k: tuple(sharpe(run_backtest(panel, test, s, cost_bps=c, center=k != "ou")["net"]) for c in (0, 5))
+            for k, s in out.items()}
 
 
 def main():
