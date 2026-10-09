@@ -4,3 +4,5 @@ entry: 1.25         # open long when s < -entry, short when s > +entry
 exit_short: 0.75    # close a short when s < exit_short
 exit_long: -0.50    # close a long when s > exit_long
 kappa_min: 8.4      # 252/30: only trade half-lives under ~21 trading days
+tune:               # Fold 1 validation only; every value is logged as a trial
+  entry: [1.0, 1.25, 1.5]

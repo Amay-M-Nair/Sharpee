@@ -2,12 +2,14 @@
 
     python scripts/run_baseline.py               # test years 2020-2023
     python scripts/run_baseline.py --holdout     # 2024-2025: run once, after every setting is frozen
+    python scripts/run_baseline.py --tune        # pick the entry threshold on Fold 1 validation (2018-2019)
 
 The OU strategy has no fitted parameters (Avellaneda-Lee defaults), so its
 positions are computed once over the whole panel and then sliced by period.
 """
 
 import argparse
+import json
 
 import matplotlib
 import numpy as np
@@ -18,16 +20,41 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from sharpee.backtest.engine import run_backtest  # noqa: E402
 from sharpee.config import load_config, repo_path  # noqa: E402
-from sharpee.evaluation.metrics import summarize  # noqa: E402
+from sharpee.evaluation.metrics import sharpe, summarize  # noqa: E402
+from sharpee.evaluation.walk_forward import make_folds, split  # noqa: E402
 from sharpee.features.diagnostics import residual_report  # noqa: E402
 from sharpee.pipeline import load_panel, runs_dir  # noqa: E402
 from sharpee.strategies.ou_strategy import ou_positions  # noqa: E402
+from sharpee.training.trials import log_trial  # noqa: E402
+
+
+def tune(panel, cfg):
+    """Try each entry threshold on Fold 1 validation; every value tried is logged as a trial."""
+    fold = make_folds(cfg["test_years"], cfg["train_start"], cfg["val_years"])[0]
+    _, val, _ = split(panel, fold, cfg["embargo_days"])
+    all_idx = np.arange(len(panel.dates))
+    best = None
+    for entry in cfg["tune"]["entry"]:
+        params = {"window": cfg["window"], "entry": entry, "exit_short": cfg["exit_short"],
+                  "exit_long": cfg["exit_long"], "kappa_min": cfg["kappa_min"]}
+        pos = ou_positions(panel, all_idx, **params)
+        frame = run_backtest(panel, val, pos[val], cost_bps=cfg["cost_bps"], cap=cfg["cap"])
+        trial_id = log_trial(runs_dir(cfg), "ou", fold.name, params, frame["net"])
+        s = sharpe(frame["net"])
+        print(f"entry {entry:.2f}: val net Sharpe {s:+.2f}, gross {sharpe(frame['gross']):+.2f}, "
+              f"turnover {frame['turnover'].mean():.2f}  (trial {trial_id})")
+        if best is None or s > best[0]:
+            best = (s, trial_id, params)
+    (runs_dir(cfg) / "best_ou.json").write_text(json.dumps(
+        {"trial_id": best[1], "val_sharpe": best[0], "params": best[2]}, indent=2))
+    print(f"best entry {best[2]['entry']} -> runs/best_ou.json")
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--holdout", action="store_true")
     ap.add_argument("--rebuild-panel", action="store_true")
+    ap.add_argument("--tune", action="store_true")
     args = ap.parse_args()
     cfg = load_config("data", "experiment", "baseline")
     reports = repo_path(cfg["reports_dir"])
@@ -36,6 +63,9 @@ def main():
     panel = load_panel(cfg, rebuild=args.rebuild_panel)
     print(f"panel: {len(panel.dates)} dates {panel.dates[0].date()} -> {panel.dates[-1].date()}, "
           f"{panel.n_slots} slots, {len(panel.phi)} monthly factor models")
+    if args.tune:
+        tune(panel, cfg)
+        return
 
     all_idx = np.arange(len(panel.dates))
     pos = ou_positions(panel, all_idx, window=cfg["window"], entry=cfg["entry"],
