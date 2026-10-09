@@ -1,6 +1,6 @@
-# Phase 1 findings: the evidence behind Sharpee's design
+# Findings: the evidence behind Sharpee's design
 
-Each figure below comes from the notebooks ([01 data exploration](../notebooks/01_data_exploration.ipynb), [02 residual analysis](../notebooks/02_residual_analysis.ipynb)) or from `scripts/run_baseline.py`, and rerunning them regenerates it. Every section covers what the data shows and which design decision it justifies.
+Each figure below comes from the notebooks ([01 data exploration](../notebooks/01_data_exploration.ipynb), [02 residual analysis](../notebooks/02_residual_analysis.ipynb), [03 model training](../notebooks/03_train_models.ipynb)) or from `scripts/run_baseline.py`, and rerunning them regenerates it. Every section covers what the data shows and which design decision it justifies. Sections 1-10 are Phase 1 (data and baseline); sections 11-14 are Phase 2 (neural models).
 
 ---
 
@@ -107,4 +107,62 @@ Each figure below comes from the notebooks ([01 data exploration](../notebooks/0
 
 **What it shows.** The mean-reversion signal makes money before costs. Trading 24% of the book every day, 5 bps costs take most of the gross return and 10 bps take all of it. The edge also fades quickly: most of it is gone if trades are delayed by one day.
 
-**What comes next.** Phase 2 trains MLP and Transformer models whose loss is the portfolio's **Sharpe ratio after costs**, using the same portfolio construction and backtester. The question is whether a model optimized this way can keep the signal while trading less.
+**What comes next.** Phase 2 trains MLP, temporal CNN and Transformer models whose loss is the portfolio's **Sharpe ratio after costs**, using the same portfolio construction and backtester. The question is whether a model optimized this way can keep the signal while trading less.
+
+---
+
+# Phase 2: neural models on walk-forward Fold 1
+
+All Phase 2 numbers use Fold 1 only: training on 2010-2017 and validation on 2018-2019, with a 30-day embargo before each. The 2020-2023 test years stay sealed until Phase 3. Validation days were used to pick configurations and stopping epochs, so these numbers are optimistic for every strategy, and one Sharpe estimate over 473 days has a standard error of about 0.7.
+
+---
+
+## 11. Every configuration tried is on the record
+
+![Tuning trials](figures/03_tuning_trials.png)
+
+**What it shows.** A small grid per strategy: 3 OU entry thresholds, and 4 configurations each for the MLP, temporal CNN and Transformer (model size and learning rate). That's 15 in total, each logged to the trial log with its daily validation returns.
+
+**Design decision.** The more configurations you try, the better the best one looks by luck alone. Phase 3's **Deflated Sharpe Ratio** raises the bar using exactly this count and the spread of these Sharpes. Runs from the two bugs found during Phase 2 are archived and excluded, because they came from a different, broken pipeline.
+
+---
+
+## 12. Training is stable once the pipeline is right
+
+![Training curves](figures/03_training_curves.png)
+
+**What it shows.** Each model's selected configuration is retrained with seeds 0, 1 and 2. Validation Sharpe climbs from negative values at initialization and levels off. The Transformer is the most consistent: all three seeds settle at +0.20 to +0.23. The MLP lands near zero, and the CNN depends most on the seed (-0.23 to +0.06).
+
+**Design decision.** Results are always reported as a mean and spread over seeds, never a single run, so that a lucky initialization can't pass for a better model.
+
+---
+
+## 13. Same signal, less trading
+
+![Validation comparison](figures/03_validation_comparison.png)
+
+![Cost sensitivity](figures/03_cost_sensitivity.png)
+
+| Validation 2018-2019, 5 bps | Gross Sharpe | Net Sharpe (seed mean ± sd) | Turnover per day | Break-even cost | Beta |
+|---|---|---|---|---|---|
+| OU | 0.81 | -0.35 | 23.7% | ~3.5 bps | 0.00 |
+| MLP | 0.76 | +0.05 ± 0.05 | 18.1% | ~5 bps | 0.00 |
+| Temporal CNN | 0.62 | -0.06 ± 0.15 | 17.4% | ~4.5 bps | -0.01 |
+| **Transformer** | **0.82** | **+0.21 ± 0.02** | **15.5%** | **~7 bps** | 0.00 |
+
+**What it shows.** All four strategies earn a similar gross Sharpe, so the networks didn't find a stronger signal than OU. What changed is **how much they trade**. The Transformer keeps OU's gross edge with about a third less turnover, and at 5 bps that is the difference between losing money (-0.35) and making it (+0.21). Every network breaks even at a higher cost than OU, and every book is market-neutral.
+
+**Design decision.** This is the case for putting **costs inside the training loss**: the models learned to trade less where trading doesn't pay. Phase 3 tests it directly with an ablation that trains the same models without costs in the loss.
+
+---
+
+## 14. What the networks learned: revert small moves, follow big ones
+
+![Score vs s-score](figures/03_score_vs_sscore.png)
+
+**What it shows.** Each validation stock-day is bucketed by its OU s-score (how stretched the cumulative residual is), and the networks' standardized scores are averaged per bucket. All three networks, trained independently, learned the same shape:
+
+- **Moderate stretches (|s| below about 2): reversion**, like OU. They buy residuals that fell and sell ones that rose (rank correlation with the s-score about -0.45).
+- **Extreme stretches: continuation**, strongest after large up-moves.
+
+**Why it matters.** Large residual moves are often news, such as earnings or guidance, rather than liquidity noise, and news-driven moves tend to keep drifting instead of reverting. OU shorts every s > 1.25 regardless, so it trades against exactly those moves. The networks found a nonlinear rule that the classic model can't express, without being told to look for one.
