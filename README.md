@@ -2,7 +2,7 @@
 
 A research framework that compares a classical mean-reversion strategy with neural trading models on US equities. The neural models are trained to maximize the **portfolio's Sharpe ratio after transaction costs**, not to forecast prices. Everything is evaluated walk-forward, with no look-ahead.
 
-> **Status: Phase 1 complete, Phase 2 in progress.** The data pipeline, factor residuals, classical baseline, backtester and tests are done. The neural models (MLP, temporal CNN, Transformer) and their Sharpe-after-costs training are built and tested; the Fold 1 comparison is running (see [Roadmap](#roadmap)).
+> **Status: Phases 1 and 2 of 4 complete.** Data pipeline, factor residuals, OU baseline, backtester, and three neural models trained on Sharpe after costs, compared on validation data. Phase 3 (the sealed 2020-2023 test years and significance tests) is next (see [Roadmap](#roadmap)).
 
 ## What Phase 1 delivers
 
@@ -44,7 +44,7 @@ Strategy performance:
 
 **Why the strategy is built this way:** [reports/README.md](reports/README.md) walks through ten figures (data coverage, fat tails, factor structure, residual autocorrelation, half-lives, costs) and the design decision each one supports.
 
-## Phase 2 so far: neural models
+## Phase 2: neural models
 
 | Component | What it does |
 |---|---|
@@ -53,7 +53,20 @@ Strategy performance:
 | **Fold 1 tuning only** | A small grid per model, trained on 2010–2017 and validated on 2018–2019 with early stopping. The 2020–2023 test years stay sealed until Phase 3. Every configuration tried is logged in a trial log, which the Deflated Sharpe Ratio uses in Phase 3. |
 | **Notebook 03** | Retrains each model's best configuration with 3 seeds, then compares all strategies on validation: net and gross Sharpe, turnover, beta, cost sensitivity, and what the networks learned relative to the OU s-score. |
 
-Results will be added here once the comparison run finishes.
+### Phase 2 results (validation 2018-2019, 3 seeds per model)
+
+| Strategy | Gross Sharpe | Net Sharpe, 5 bps | Turnover per day | Beta |
+|---|---|---|---|---|
+| OU baseline | 0.81 | -0.35 | 23.7% | 0.00 |
+| MLP | 0.76 | +0.05 ± 0.05 | 18.1% | 0.00 |
+| Temporal CNN | 0.62 | -0.06 ± 0.15 | 17.4% | -0.01 |
+| **Transformer** | **0.82** | **+0.21 ± 0.02** | **15.5%** | 0.00 |
+
+![Validation comparison](reports/figures/03_validation_comparison.png)
+
+- **Same signal, less trading.** The Transformer matches OU's gross Sharpe with about a third less turnover. That turns OU's loss after costs into a profit, consistently across seeds, and breaks even at about 7 bps against OU's 3.5.
+- **The networks learned a rule OU can't express.** All three independently learned to bet on reversion for moderate residual moves and on *continuation* for extreme ones, which are often news-driven ([details](reports/README.md#14-what-the-networks-learned-revert-small-moves-follow-big-ones)).
+- **Not yet evidence.** These are validation numbers that were also used to choose configurations, and one Sharpe over 473 days has a standard error of about 0.7. Phase 3's sealed test years and the Deflated Sharpe Ratio decide.
 
 ## How correctness is verified
 
@@ -101,13 +114,13 @@ src/sharpee/
 notebooks/        01 data exploration, 02 residual analysis, 03 model training (outputs saved, readable on GitHub)
 scripts/          download_data, run_baseline, train_model, sanity_synthetic
 tests/            53 tests, including the look-ahead test
-reports/          results tables, figures and the Phase 1 findings write-up
+reports/          results tables, figures and the findings write-up (Phases 1-2)
 ```
 
 ## Roadmap
 
 1. ~~**Data and baseline:** universe, residuals, OU, backtester, tests~~ ✅
-2. **Neural models** (in progress): MLP, temporal CNN and a compact Transformer (encoder reused from my transformer-from-scratch project), trained end-to-end on Sharpe after costs and tuned on Fold 1 only. Every configuration tried is logged. Built and tested; validation comparison running.
+2. ~~**Neural models:** MLP, temporal CNN and a compact Transformer (encoder reused from my transformer-from-scratch project), trained end-to-end on Sharpe after costs and tuned on Fold 1 only, with every configuration logged~~ ✅
 3. **Evaluation:** yearly walk-forward retraining, cost and delay sensitivity, ablations, and significance tests: Probabilistic and Deflated Sharpe Ratio (the latter adjusts for the number of configurations tried) and block-bootstrap confidence intervals. Then the one-shot 2024–25 holdout.
 4. **Delivery:** Streamlit dashboard and research report.
 
