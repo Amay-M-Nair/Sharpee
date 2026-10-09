@@ -41,6 +41,8 @@ Strategy performance:
 - **This is the bar for Phase 2.** The neural models have to keep the edge while trading less, so it survives costs.
 - **Market exposure is low:** beta is 0.04.
 
+**Why the strategy is built this way:** [reports/README.md](reports/README.md) walks through ten figures (data coverage, fat tails, factor structure, residual autocorrelation, half-lives, costs) and the design decision each one supports.
+
 ## How correctness is verified
 
 - **Look-ahead test:** scramble every price after a cutoff date, rebuild the whole pipeline, and assert that every residual, signal and weight on or before the cutoff is unchanged.
@@ -75,7 +77,7 @@ src/sharpee/
 notebooks/        01 data exploration, 02 residual analysis (outputs saved, readable on GitHub)
 scripts/          download_data, run_baseline, sanity_synthetic
 tests/            33 tests, including the look-ahead test
-reports/          results tables and figures
+reports/          results tables, figures and the Phase 1 findings write-up
 ```
 
 ## Roadmap
