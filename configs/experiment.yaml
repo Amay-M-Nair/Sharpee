@@ -1,0 +1,14 @@
+# Portfolio, costs and evaluation periods shared by every strategy.
+cost_bps: 5.0                 # per unit of traded notional
+cost_grid: [0, 5, 10, 20]     # sensitivity
+cap: 0.02                     # single-name cap on |x|
+embargo_days: 30              # dropped at the end of train and validation periods
+
+train_start: 2010
+val_years: 2
+test_years: [2020, 2021, 2022, 2023]
+holdout_years: [2024, 2025]   # run once, after every setting is frozen
+
+runs_dir: runs
+reports_dir: reports
+seed: 0
