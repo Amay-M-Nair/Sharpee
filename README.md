@@ -29,17 +29,18 @@ Strategy performance:
 
 | Cost per unit traded | Ann. return | Ann. vol | Sharpe | Max drawdown |
 |---|---|---|---|---|
-| 0 bps | 3.5% | 5.0% | **0.70** | −8.4% |
-| 5 bps | −0.8% | 5.0% | **−0.17** | −15.7% |
-| 0 bps, 1-day delay | 1.1% | 4.9% | 0.23 | −8.5% |
+| 0 bps | 3.6% | 3.8% | **0.94** | −4.9% |
+| 5 bps | 0.6% | 3.8% | **0.15** | −8.0% |
+| 10 bps | −2.4% | 3.8% | −0.65 | −14.4% |
+| 0 bps, 1-day delay | 1.3% | 3.7% | 0.36 | −6.2% |
 
 ![OU baseline equity](reports/figures/ou_equity_test.png)
 
 **Reading the results:**
-- **The mean-reversion signal is real but small.** The strategy trades about 34% of the book per day, so at 5 bps costs exceed its gross return. This matches the documented decline of classical stat arb.
+- **The mean-reversion signal is real but small.** The strategy trades about 24% of the book per day, so 5 bps costs take most of its gross return and 10 bps take all of it. This matches the documented decline of classical stat arb.
 - **The edge decays within a day.** Most of it disappears with a one-day execution delay.
 - **This is the bar for Phase 2.** The neural models have to keep the edge while trading less, so it survives costs.
-- **Market exposure is low:** beta is 0.04.
+- **Market exposure is low:** beta is 0.05.
 
 **Why the strategy is built this way:** [reports/README.md](reports/README.md) walks through ten figures (data coverage, fat tails, factor structure, residual autocorrelation, half-lives, costs) and the design decision each one supports.
 

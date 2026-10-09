@@ -100,10 +100,11 @@ Each figure below comes from the notebooks ([01 data exploration](../notebooks/0
 
 | OU baseline, 2020–2023 | Sharpe | Annual return | Turnover per day |
 |---|---|---|---|
-| Before costs | 0.70 | 3.5% | 34% |
-| After 5 bps | −0.17 | −0.8% | 34% |
-| Before costs, 1-day delay | 0.23 | 1.1% | 34% |
+| Before costs | 0.94 | 3.6% | 24% |
+| After 5 bps | 0.15 | 0.6% | 24% |
+| After 10 bps | −0.65 | −2.4% | 24% |
+| Before costs, 1-day delay | 0.36 | 1.3% | 24% |
 
-**What it shows.** The mean-reversion signal makes money before costs. At 5 bps per unit traded, trading 34% of the book every day costs more than the strategy earns. The edge also fades quickly: most of it is gone if trades are delayed by one day.
+**What it shows.** The mean-reversion signal makes money before costs. Trading 24% of the book every day, 5 bps costs take most of the gross return and 10 bps take all of it. The edge also fades quickly: most of it is gone if trades are delayed by one day.
 
 **What comes next.** Phase 2 trains MLP and Transformer models whose loss is the portfolio's **Sharpe ratio after costs**, using the same portfolio construction and backtester. The question is whether a model optimized this way can keep the signal while trading less.
