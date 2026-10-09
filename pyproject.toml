@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deepstat"
+version = "0.1.0"
+description = "Cost-aware deep learning for statistical arbitrage"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch",
+    "numpy",
+    "pandas",
+    "scipy",
+    "pyarrow",
+    "pyyaml",
+    "requests",
+    "yfinance",
+    "matplotlib",
+    "plotly",
+    "streamlit",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

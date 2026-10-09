@@ -1,0 +1,13 @@
+torch
+numpy
+pandas
+scipy
+pyarrow
+pyyaml
+requests
+yfinance
+matplotlib
+plotly
+streamlit
+tqdm
+pytest
