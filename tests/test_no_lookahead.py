@@ -3,10 +3,10 @@
 import numpy as np
 import pytest
 
-from deepstat.backtest.engine import weights_for
-from deepstat.data.preprocess import MarketData
-from deepstat.pipeline import panel_from_market
-from deepstat.strategies.ou_strategy import ou_positions
+from sharpee.backtest.engine import weights_for
+from sharpee.data.preprocess import MarketData
+from sharpee.pipeline import panel_from_market
+from sharpee.strategies.ou_strategy import ou_positions
 
 from .conftest import SMALL
 

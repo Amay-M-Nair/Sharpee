@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 
-from deepstat.portfolio.construction import build_weights, to_global
-from deepstat.portfolio.risk import exposures
+from sharpee.portfolio.construction import build_weights, to_global
+from sharpee.portfolio.risk import exposures
 
 
 def test_gross_one_and_untradable_zero():

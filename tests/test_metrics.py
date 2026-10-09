@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from deepstat.evaluation.metrics import max_drawdown, sharpe, summarize
+from sharpee.evaluation.metrics import max_drawdown, sharpe, summarize
 
 
 def test_sharpe_hand_value():

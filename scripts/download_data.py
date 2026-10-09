@@ -9,10 +9,10 @@ import json
 
 import pandas as pd
 
-from deepstat.config import load_config, repo_path
-from deepstat.data.download import download_prices, latest_snapshot, save_snapshot
-from deepstat.data.preprocess import clean, write_log
-from deepstat.data.universe import fetch_membership, tickers_between
+from sharpee.config import load_config, repo_path
+from sharpee.data.download import download_prices, latest_snapshot, save_snapshot
+from sharpee.data.preprocess import clean, write_log
+from sharpee.data.universe import fetch_membership, tickers_between
 
 
 def main():

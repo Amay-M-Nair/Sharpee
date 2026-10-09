@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "deepstat"
+name = "sharpee"
 version = "0.1.0"
 description = "Cost-aware deep learning for statistical arbitrage"
 readme = "README.md"

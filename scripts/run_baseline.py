@@ -16,12 +16,12 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-from deepstat.backtest.engine import run_backtest  # noqa: E402
-from deepstat.config import load_config, repo_path  # noqa: E402
-from deepstat.evaluation.metrics import summarize  # noqa: E402
-from deepstat.features.diagnostics import residual_report  # noqa: E402
-from deepstat.pipeline import load_panel, runs_dir  # noqa: E402
-from deepstat.strategies.ou_strategy import ou_positions  # noqa: E402
+from sharpee.backtest.engine import run_backtest  # noqa: E402
+from sharpee.config import load_config, repo_path  # noqa: E402
+from sharpee.evaluation.metrics import summarize  # noqa: E402
+from sharpee.features.diagnostics import residual_report  # noqa: E402
+from sharpee.pipeline import load_panel, runs_dir  # noqa: E402
+from sharpee.strategies.ou_strategy import ou_positions  # noqa: E402
 
 
 def main():

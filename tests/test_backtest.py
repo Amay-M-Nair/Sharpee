@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 import torch
 
-from deepstat.backtest.costs import portfolio_returns, turnover
-from deepstat.backtest.engine import run_backtest, weights_for
-from deepstat.evaluation.walk_forward import make_fold, make_folds, split
+from sharpee.backtest.costs import portfolio_returns, turnover
+from sharpee.backtest.engine import run_backtest, weights_for
+from sharpee.evaluation.walk_forward import make_fold, make_folds, split
 
 
 def test_hand_example_timing_and_costs():

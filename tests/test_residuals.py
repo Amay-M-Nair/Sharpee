@@ -1,7 +1,7 @@
 import numpy as np
 
-from deepstat.features.pca_residuals import factor_model
-from deepstat.strategies.ou_strategy import ou_fit, ou_positions
+from sharpee.features.pca_residuals import factor_model
+from sharpee.strategies.ou_strategy import ou_fit, ou_positions
 
 
 def returns_window(seed=0, w=200, n=25, k=3):

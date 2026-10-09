@@ -1,4 +1,4 @@
-# DeepStat: cost-aware deep learning for statistical arbitrage
+# Sharpee: cost-aware deep learning for statistical arbitrage
 
 A research framework that compares a classical mean-reversion strategy with neural trading models on US equities. The neural models are trained to maximize the **portfolio's Sharpe ratio after transaction costs**, not to forecast prices. Everything is evaluated walk-forward, with no look-ahead.
 
@@ -65,7 +65,7 @@ pytest
 ```
 configs/          data, baseline and experiment settings (YAML)
 docs/             full project plan (v2)
-src/deepstat/
+src/sharpee/
   data/           universe, download, cleaning + eligibility, synthetic markets
   features/       returns, rolling PCA residuals, diagnostics
   strategies/     OU / s-score baseline

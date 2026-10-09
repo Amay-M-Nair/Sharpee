@@ -8,11 +8,11 @@ If either fails, the bug is in the pipeline, not in the market.
 
 import numpy as np
 
-from deepstat.backtest.engine import run_backtest
-from deepstat.data.synthetic import make_market
-from deepstat.evaluation.metrics import summarize
-from deepstat.pipeline import panel_from_market
-from deepstat.strategies.ou_strategy import ou_positions
+from sharpee.backtest.engine import run_backtest
+from sharpee.data.synthetic import make_market
+from sharpee.evaluation.metrics import summarize
+from sharpee.pipeline import panel_from_market
+from sharpee.strategies.ou_strategy import ou_positions
 
 CFG = {"universe_size": 100, "min_price": 5.0, "history_days": 312, "min_history_frac": 0.98,
        "dollar_volume_window": 20, "n_factors": 5, "pca_window": 252, "max_lookback": 60}

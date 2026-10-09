@@ -2,8 +2,8 @@
 
 import pytest
 
-from deepstat.data.synthetic import make_market
-from deepstat.pipeline import panel_from_market
+from sharpee.data.synthetic import make_market
+from sharpee.pipeline import panel_from_market
 
 SMALL = {
     "universe_size": 30, "min_price": 5.0, "history_days": 140, "min_history_frac": 0.98,

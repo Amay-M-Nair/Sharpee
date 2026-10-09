@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from deepstat.data.preprocess import MarketData, clean, eligibility
-from deepstat.data.universe import membership_mask, tickers_between, to_yahoo
+from sharpee.data.preprocess import MarketData, clean, eligibility
+from sharpee.data.universe import membership_mask, tickers_between, to_yahoo
 
 
 def toy_market(n_days=60):
