@@ -1,0 +1,21 @@
+# Compact Transformer encoder (blocks from transformer-from-scratch).
+model: transformer
+lookback: 30
+params:
+  d_model: 64
+  num_heads: 4
+  num_layers: 2
+  d_ff: 128
+  dropout: 0.1
+train:
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 40
+  patience: 6
+  block_days: 64
+  grad_clip: 1.0
+  exposure_lambda: 0.0
+  train_cost_bps: 5.0
+tune:
+  params.d_model: [32, 64]
+  train.lr: [0.001, 0.0003]

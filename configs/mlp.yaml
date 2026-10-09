@@ -1,0 +1,18 @@
+# Feed-forward baseline: sees the 30-day path as a flat vector.
+model: mlp
+lookback: 30
+params:
+  hidden: 64
+  dropout: 0.1
+train:
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 40
+  patience: 6
+  block_days: 64          # contiguous days per batch (all stocks)
+  grad_clip: 1.0
+  exposure_lambda: 0.0
+  train_cost_bps: 5.0     # costs inside the loss
+tune:                     # Fold 1 only; every combination is logged as a trial
+  params.hidden: [32, 64]
+  train.lr: [0.001, 0.0003]

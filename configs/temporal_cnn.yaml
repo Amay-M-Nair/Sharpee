@@ -1,0 +1,18 @@
+# Dilated 1D convolutions: local patterns in the 30-day path.
+model: temporal_cnn
+lookback: 30
+params:
+  channels: 32
+  dropout: 0.1
+train:
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 40
+  patience: 6
+  block_days: 64
+  grad_clip: 1.0
+  exposure_lambda: 0.0
+  train_cost_bps: 5.0
+tune:
+  params.channels: [16, 32]
+  train.lr: [0.001, 0.0003]
