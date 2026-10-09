@@ -2,11 +2,15 @@
 
 import numpy as np
 import pytest
+import torch
 
 from sharpee.backtest.engine import weights_for
 from sharpee.data.preprocess import MarketData
+from sharpee.models import build_model
 from sharpee.pipeline import panel_from_market
 from sharpee.strategies.ou_strategy import ou_positions
+from sharpee.training.dataset import DayBlocks
+from sharpee.training.train import predict
 
 from .conftest import SMALL
 
@@ -53,6 +57,17 @@ def test_ou_positions_and_weights_unchanged(pair):
     past = idx[:t + 1]
     assert np.array_equal(weights_for(a, past, pa[:t + 1], cap=0.02),
                           weights_for(b, past, pb[:t + 1], cap=0.02))
+
+
+@pytest.mark.parametrize("name", ["mlp", "temporal_cnn", "transformer"])
+def test_model_scores_unchanged(pair, name):
+    a, b, t = pair
+    past = np.arange(t - 59, t + 1)
+    torch.manual_seed(0)
+    model = build_model(name, lookback=30)
+    sa = predict(model, DayBlocks(a, past, 30))
+    sb = predict(model, DayBlocks(b, past, 30))
+    assert np.array_equal(sa, sb)
 
 
 def test_realized_return_is_the_only_thing_that_moves(pair):
