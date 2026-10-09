@@ -1,0 +1,20 @@
+# Universe, history and residual construction.
+start: "2008-01-01"          # 2008-2009 is warm-up only (PCA + OU windows)
+end: "2025-12-31"
+market_ticker: SPY
+membership_url: https://raw.githubusercontent.com/fja05680/sp500/master/sp500_ticker_start_end.csv
+
+raw_dir: data/raw
+processed_dir: data/processed
+
+# Per-date eligibility (all computed from data up to and including that date)
+universe_size: 150           # top N by trailing dollar volume among eligible members
+min_price: 5.0
+history_days: 312            # 252 PCA + 60 OU
+min_history_frac: 0.98       # tolerate a few missing prints inside the history window
+dollar_volume_window: 20
+
+# Rolling PCA residuals, refit on the first trading day of each month
+pca_window: 252
+n_factors: 5
+max_lookback: 60             # longest residual window any strategy reads
