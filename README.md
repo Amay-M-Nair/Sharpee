@@ -72,6 +72,7 @@ src/sharpee/
   portfolio/      shared weight construction and exposure diagnostics
   backtest/       accounting and costs, backtest engine
   evaluation/     metrics, walk-forward folds
+notebooks/        01 data exploration, 02 residual analysis (outputs saved, readable on GitHub)
 scripts/          download_data, run_baseline, sanity_synthetic
 tests/            33 tests, including the look-ahead test
 reports/          results tables and figures
@@ -86,7 +87,8 @@ reports/          results tables and figures
 
 ## Limitations
 
-- **Survivorship bias remains.** Yahoo has no prices for 250 of the 884 historical members, mostly delisted or acquired companies, so results are likely biased upward.
+- **Survivorship bias remains.** Yahoo has no prices for 250 of the 884 historical members, mostly delisted or acquired companies. Coverage rises from 67% of index members in 2008 to 98% in 2025, so results are likely biased upward.
+- **Some tickers are reused.** A few delisted symbols (e.g. `CPWR`) now belong to unrelated securities on Yahoo. The price and liquidity filters keep all of them out of the tradable universe; [notebook 01](notebooks/01_data_exploration.ipynb) shows the check.
 - **Simplified execution.** Trades happen at the closing price, costs are a flat proportional rate, and weights don't drift between daily rebalances.
 - **Simplified relative to Avellaneda–Lee.** PCA factors are refit monthly rather than daily, and the s-score has no drift adjustment.
 
