@@ -1,0 +1,6 @@
+# Avellaneda-Lee OU / s-score baseline (defaults from the paper).
+window: 60          # days of cumulative residual the AR(1) is fitted on
+entry: 1.25         # open long when s < -entry, short when s > +entry
+exit_short: 0.75    # close a short when s < exit_short
+exit_long: -0.50    # close a long when s > exit_long
+kappa_min: 8.4      # 252/30: only trade half-lives under ~21 trading days
