@@ -17,8 +17,10 @@ PERIODS_PER_YEAR = 252
 
 NAMES = {"ou": "OU", "mlp": "MLP", "temporal_cnn": "Temporal CNN", "transformer": "Transformer",
          "transformer_nocost": "Transformer, no costs in loss"}
-COLORS = {"ou": "#888780", "mlp": "#378ADD", "temporal_cnn": "#BA7517", "transformer": "#1D9E75",
-          "transformer_nocost": "#97C459"}
+# High contrast on the dark theme; blue and orange stay distinct for colour-blind viewers
+COLORS = {"ou": "#C9D1D9", "mlp": "#58A6FF", "temporal_cnn": "#F0883E", "transformer": "#3DDC97",
+          "transformer_nocost": "#F2CC60"}
+REFERENCE = "#6E7681"  # zero lines, thresholds
 MAIN = ["ou", "mlp", "temporal_cnn", "transformer"]
 PERIODS = {"test": "Test years 2020-2023", "holdout": "Holdout 2024-2025"}
 
@@ -110,3 +112,19 @@ def load_signals(period: str) -> pd.DataFrame:
 
 def load_trials() -> pd.DataFrame:
     return pd.read_csv(DASH / "trials.csv")
+
+
+def learned_rule(signals: pd.DataFrame, step: float = 0.5, limit: float = 3.0) -> pd.DataFrame:
+    """Mean standardized model score per OU s-score bucket: what each network does at each stretch."""
+    edges = np.arange(-limit, limit + step / 2, step)
+    mids = (edges[:-1] + edges[1:]) / 2
+    buckets = pd.cut(signals["s_score"], edges, labels=mids)
+    models = [m for m in ("mlp", "temporal_cnn", "transformer") if m in signals]
+    out = signals.groupby(buckets, observed=True)[models].mean()
+    out.index = out.index.astype(float)
+    return out
+
+
+def load_attention() -> pd.DataFrame:
+    """Transformer attention received by each day of the 30-day window (test years, seed 0)."""
+    return pd.read_csv(DASH / "attention_test.csv", index_col="day")

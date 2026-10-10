@@ -31,3 +31,16 @@ def test_signals_cover_the_universe():
 
 def test_verdict_line():
     assert dd.verdict_line("test") == "no reliable edge after costs"
+
+
+def test_learned_rule_reverts_moderate_moves():
+    rule = dd.learned_rule(dd.load_signals("test"))
+    assert list(rule.columns) == ["mlp", "temporal_cnn", "transformer"]
+    # long when the residual fell (s < 0), short when it rose: a downward slope across the middle
+    assert (rule.loc[-1.25] > 0).all() and (rule.loc[1.25] < 0).all()
+
+
+def test_attention_is_a_distribution_over_the_window():
+    att = dd.load_attention()
+    assert len(att) == 30 and att.index.max() == 0
+    assert abs(att["moderate"].sum() - 1) < 1e-3 and abs(att["extreme"].sum() - 1) < 1e-3

@@ -1,6 +1,7 @@
 """Export the small files the dashboard reads into reports/dashboard/.
 
-    python scripts/export_dashboard.py
+    python scripts/export_dashboard.py                  # everything
+    python scripts/export_dashboard.py --only attention # one part
 
 The hosted app has no price data, panel or models, only these files:
 
@@ -10,18 +11,25 @@ The hosted app has no price data, panel or models, only these files:
     signals_<period>.parquet   per stock and day: OU s-score, OU position, and each model's score
                                (standardized across stocks each day, averaged over the 3 seeds)
     trials.csv                 every Fold 1 configuration tried, with its validation Sharpe
+    attention_test.csv         Transformer attention received by each day of its window (seed 0, test
+                               years), for moderate and extreme OU stretches
 """
 
+import argparse
 import json
 
 import numpy as np
 import pandas as pd
+import torch
 
 from sharpee.backtest.engine import run_backtest
 from sharpee.config import load_config, repo_path
 from sharpee.evaluation.strategies import combined, strategy_scores
+from sharpee.evaluation.walk_forward import make_folds, split
+from sharpee.models import build_model
 from sharpee.pipeline import load_panel, runs_dir
 from sharpee.strategies.ou_strategy import ou_fit
+from sharpee.training.dataset import DayBlocks
 from sharpee.training.trials import load_trials
 
 MODELS = ["mlp", "temporal_cnn", "transformer"]
@@ -70,15 +78,32 @@ def export_period(panel, runs, cfg, period, years, out):
           f"{len(signals):,} stock-days across {signals['ticker'].nunique()} tickers")
 
 
-def main():
-    cfg = load_config("data", "experiment", "baseline")
-    runs = runs_dir(cfg)
-    out = repo_path(cfg["reports_dir"]) / "dashboard"
-    out.mkdir(parents=True, exist_ok=True)
-    panel = load_panel(cfg)
-    export_period(panel, runs, cfg, "test", cfg["test_years"], out)
-    export_period(panel, runs, cfg, "holdout", cfg["holdout_years"], out)
+@torch.no_grad()
+def export_attention(panel, runs, cfg, out):
+    """Last-layer attention received per window day, averaged over heads, query days and stock-days."""
+    best = json.loads((runs / "best_transformer.json").read_text())["config"]
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    parts = {"moderate": [], "extreme": []}
+    for fold in make_folds(cfg["test_years"], cfg["train_start"], cfg["val_years"]):
+        _, _, te = split(panel, fold, cfg["embargo_days"])
+        model = build_model("transformer", best["lookback"], **best["params"]).to(device).eval()
+        model.load_state_dict(torch.load(runs / "walkforward" / "test" / "models" /
+                                         f"transformer_seed0_{fold.name}.pt", map_location=device))
+        x = DayBlocks(panel, te, best["lookback"], device).X
+        s, _, ok = ou_fit(panel.windows(te, cfg["window"]))
+        ok &= panel.tradable[te]
+        flat_x, extreme = x[torch.from_numpy(ok).to(device)], np.abs(s[ok]) >= 2
+        for a in range(0, len(flat_x), 4096):
+            _, attn = model(flat_x[a:a + 4096].unsqueeze(-1), return_attn=True)
+            got = attn[-1].mean(dim=(1, 2)).cpu().numpy()
+            parts["moderate"].append(got[~extreme[a:a + 4096]])
+            parts["extreme"].append(got[extreme[a:a + 4096]])
+    days = np.arange(best["lookback"]) - best["lookback"] + 1
+    pd.DataFrame({"day": days, **{k: np.concatenate(v).mean(0) for k, v in parts.items()}})         .to_csv(out / "attention_test.csv", index=False)
+    print("attention: written")
 
+
+def export_trials(runs, out):
     trials = load_trials(runs)
     trials = trials[trials["fold"] == "test_2020"].copy()
 
@@ -92,6 +117,24 @@ def main():
     trials["config"] = trials.apply(describe, axis=1)
     trials[["model", "config", "val_sharpe", "trial_id"]].to_csv(out / "trials.csv", index=False)
     print(f"trials: {len(trials)}")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--only", choices=["periods", "trials", "attention"])
+    args = ap.parse_args()
+    cfg = load_config("data", "experiment", "baseline")
+    runs = runs_dir(cfg)
+    out = repo_path(cfg["reports_dir"]) / "dashboard"
+    out.mkdir(parents=True, exist_ok=True)
+    panel = load_panel(cfg)
+    if args.only in (None, "periods"):
+        export_period(panel, runs, cfg, "test", cfg["test_years"], out)
+        export_period(panel, runs, cfg, "holdout", cfg["holdout_years"], out)
+    if args.only in (None, "trials"):
+        export_trials(runs, out)
+    if args.only in (None, "attention"):
+        export_attention(panel, runs, cfg, out)
 
 
 if __name__ == "__main__":
