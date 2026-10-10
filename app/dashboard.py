@@ -3,7 +3,8 @@
     streamlit run app/dashboard.py
 
 Reads only the small files in reports/ (see scripts/export_dashboard.py); no
-model runs here.
+model runs here. Pages sit in a top navigation bar; the period and cost
+controls under it apply to every page.
 """
 
 from statistics import NormalDist
@@ -17,10 +18,9 @@ from plotly.subplots import make_subplots
 import dash_data as dd
 
 REPO = "https://github.com/Amay-M-Nair/Sharpee"
-PAGES = ["Overview", "Strategy explorer", "Risk and exposure", "Inside the signal", "Research integrity"]
 EULER_GAMMA = 0.5772156649015329
 
-st.set_page_config(page_title="Sharpee", page_icon=":chart_with_upwards_trend:", layout="wide")
+st.set_page_config(page_title="Sharpee", page_icon=":material/monitoring:", layout="wide")
 
 
 @st.cache_data
@@ -39,8 +39,8 @@ def significance_for(period):
 
 
 @st.cache_data
-def trials():
-    return dd.load_trials()
+def rule_for(period):
+    return dd.learned_rule(dd.load_signals(period))
 
 
 def style(df: pd.DataFrame):
@@ -49,44 +49,36 @@ def style(df: pd.DataFrame):
     return df.style.format({k: v for k, v in fmt.items() if k in df.columns})
 
 
-def lines(series: dict, title: str, yaxis: str = "", hline=None, percent=False, height=360):
-    fig = go.Figure()
-    for key, s in series.items():
-        fig.add_trace(go.Scatter(
-            x=s.index, y=s.values, name=dd.NAMES[key], mode="lines",
-            line=dict(color=dd.COLORS[key], width=2.5 if key in ("ou", "transformer") else 1.5,
-                      dash="dash" if key == "transformer_nocost" else None)))
-    if hline is not None:
-        fig.add_hline(y=hline, line_width=1, line_color="gray")
+def finish(fig: go.Figure, title: str, height: int = 360, yaxis: str = "", percent: bool = False,
+           legend_below: bool = False):
+    """Shared dark styling. The legend sits under the title, or below the chart when subplot titles need the top."""
+    legend = (dict(orientation="h", yanchor="top", y=-0.06, xanchor="left", x=0) if legend_below
+              else dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
     fig.update_layout(title=title, yaxis_title=yaxis, height=height, hovermode="x unified",
-                      margin=dict(l=10, r=10, t=50, b=10), legend=dict(orientation="h", y=-0.12))
+                      margin=dict(l=10, r=10, t=60 if legend_below else 80, b=10), legend=legend,
+                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    fig.update_xaxes(gridcolor="#21262D", zerolinecolor="#21262D")
+    fig.update_yaxes(gridcolor="#21262D", zerolinecolor="#21262D")
     if percent:
         fig.update_yaxes(tickformat=".0%")
     st.plotly_chart(fig)
 
 
-# ---------------------------------------------------------------- sidebar
-with st.sidebar:
-    st.title("Sharpee")
-    st.caption("Cost-aware deep learning for statistical arbitrage")
-    page = st.radio("Page", PAGES, label_visibility="collapsed")
-    st.divider()
-    period = st.radio("Period", list(dd.PERIODS), format_func=dd.PERIODS.get)
-    cost = st.slider("Cost per unit traded (bps)", 0, 30, 5)
-    st.caption("Costs are linear in traded notional, so every number is recomputed exactly: "
-               "net = gross − cost × turnover.")
-    st.divider()
-    st.markdown(f"[Code, notebooks and write-up on GitHub]({REPO})")
-    st.caption("Research and educational project; not investment advice.")
-
-returns = returns_for(period)
-available = dd.strategies_in(returns)
-main = [s for s in dd.MAIN if s in available]
+def lines(series: dict, title: str, yaxis: str = "", hline=None, percent=False, height=360):
+    fig = go.Figure()
+    for key, s in series.items():
+        fig.add_trace(go.Scatter(
+            x=s.index, y=s.values, name=dd.NAMES[key], mode="lines",
+            line=dict(color=dd.COLORS[key], width=2.6 if key in ("ou", "transformer") else 1.8,
+                      dash="dash" if key == "transformer_nocost" else None)))
+    if hline is not None:
+        fig.add_hline(y=hline, line_width=1, line_color=dd.REFERENCE)
+    finish(fig, title, height, yaxis, percent)
 
 
 # ---------------------------------------------------------------- pages
 def overview():
-    st.header("Can deep learning beat a classic stat-arb rule after costs?")
+    st.markdown("### Can deep learning beat a classic stat-arb rule after costs?")
     st.markdown(
         "Sharpee removes market and sector moves from S&P 500 stocks with rolling PCA, then bets that what is "
         "left (the residual) snaps back. A classic **Ornstein–Uhlenbeck (OU)** rule is compared with an MLP, a "
@@ -94,16 +86,18 @@ def overview():
         "costs**. Every portfolio is factor-hedged, and the rules for judging the result were committed "
         "before the test years were opened.")
     sig = significance_for(period)
-    st.warning(f"**Pre-registered verdict, {dd.PERIODS[period].lower()}: {dd.verdict_line(period)}.**")
+    st.warning(f"**Pre-registered verdict, {dd.PERIODS[period].lower()}: {dd.verdict_line(period)}.**",
+               icon=":material/gavel:")
 
     table = dd.summary(returns, main, cost)
     c = st.columns(4)
-    c[0].metric(f"Transformer net Sharpe, {cost} bps", f"{table.loc['Transformer', 'net Sharpe']:+.2f}")
-    c[1].metric(f"OU net Sharpe, {cost} bps", f"{table.loc['OU', 'net Sharpe']:+.2f}")
-    c[2].metric("PSR (needs 0.95)", f"{sig.loc['transformer', 'psr']:.2f}",
+    c[0].metric(f"Transformer net Sharpe, {cost} bps", f"{table.loc['Transformer', 'net Sharpe']:+.2f}",
+                border=True)
+    c[1].metric(f"OU net Sharpe, {cost} bps", f"{table.loc['OU', 'net Sharpe']:+.2f}", border=True)
+    c[2].metric("PSR (needs 0.95)", f"{sig.loc['transformer', 'psr']:.2f}", border=True,
                 help="Probability that the Transformer's true Sharpe is above zero, at 5 bps, allowing for "
                      "fat tails and sample length.")
-    c[3].metric("DSR (needs 0.95)", f"{sig.loc['transformer', 'dsr']:.2f}",
+    c[3].metric("DSR (needs 0.95)", f"{sig.loc['transformer', 'dsr']:.2f}", border=True,
                 help="The same probability with the bar raised for the 15 configurations tried during tuning.")
 
     table.insert(1, "95% CI at 5 bps",
@@ -112,49 +106,46 @@ def overview():
     st.caption(f"{dd.PERIODS[period]}, net of {cost} bps, neural models' 3 seeds combined. "
                "Confidence intervals are stationary-bootstrap intervals at 5 bps.")
 
-    st.subheader("What held up")
+    st.markdown("#### What held up")
     st.markdown(
         "- **Costs inside the training loss work.** The same Transformer trained without costs did worse in all "
         "3 seeds on 2020–2023 (+0.17 vs −0.08 net) and traded about 50% more.\n"
         "- **The learned models are more robust.** OU has the strongest raw signal but needs cheap, immediate "
-        "execution; move the cost slider, or turn on the one-day delay in the strategy explorer.\n"
+        "execution: move the cost slider, or turn on the one-day delay in *Strategies*.\n"
         "- **When the signal broke down in 2024–2025**, every strategy lost money, but the learned models lost "
-        "about a third as much as OU (switch the period in the sidebar).\n"
+        "about a third as much as OU (switch the period above).\n"
         "- **The networks learned a rule OU can't express:** revert moderate residual moves, follow extreme "
-        "ones (see *Inside the signal*).")
+        "ones (see *Signal*).")
 
 
 def explorer():
-    picks = st.multiselect("Strategies", available, default=main, format_func=dd.NAMES.get)
+    left, right = st.columns([3, 1], vertical_alignment="bottom")
+    picks = left.multiselect("Strategies", available, default=main, format_func=dd.NAMES.get)
+    delay = 1 if right.toggle("Trade one day late") else 0
     if not picks:
         st.info("Pick at least one strategy.")
         return
-    delay = 1 if st.toggle("Trade one day late (execution-delay check)") else 0
     nets = {s: dd.net_returns(returns, s, cost, delay) for s in picks}
-    when = " one day late" if delay else ""
+    when = ", one day late" if delay else ""
     lines({s: dd.equity(r) for s, r in nets.items()}, f"Growth of 1, net of {cost} bps{when}", hline=1)
     lines({s: dd.drawdown(r) for s, r in nets.items()}, "Drawdown", percent=True, height=280)
 
     left, right = st.columns(2)
     with left:
         curve = dd.sharpe_vs_cost(returns, picks, range(0, 31), delay)
-        fig = go.Figure()
-        for s in picks:
-            fig.add_trace(go.Scatter(x=curve.index, y=curve[dd.NAMES[s]], name=dd.NAMES[s], mode="lines",
-                                     line=dict(color=dd.COLORS[s])))
-        fig.add_vline(x=cost, line_dash="dot", line_color="gray")
-        fig.add_hline(y=0, line_width=1, line_color="gray")
-        fig.update_layout(title="Net Sharpe vs cost", xaxis_title="bps per unit traded", height=340,
-                          margin=dict(l=10, r=10, t=50, b=10), legend=dict(orientation="h", y=-0.2))
-        st.plotly_chart(fig)
+        fig = go.Figure([go.Scatter(x=curve.index, y=curve[dd.NAMES[s]], name=dd.NAMES[s], mode="lines",
+                                    line=dict(color=dd.COLORS[s], width=2.4)) for s in picks])
+        fig.add_vline(x=cost, line_dash="dot", line_color=dd.REFERENCE)
+        fig.add_hline(y=0, line_width=1, line_color=dd.REFERENCE)
+        fig.update_xaxes(title="bps per unit traded")
+        finish(fig, "Net Sharpe vs cost", 340)
     with right:
         years = dd.sharpe_by_year(returns, picks, cost)
         fig = go.Figure([go.Bar(x=[str(y) for y in years.index], y=years[dd.NAMES[s]], name=dd.NAMES[s],
                                 marker_color=dd.COLORS[s]) for s in picks])
-        fig.add_hline(y=0, line_width=1, line_color="gray")
-        fig.update_layout(title=f"Net Sharpe by year, {cost} bps", barmode="group", height=340,
-                          margin=dict(l=10, r=10, t=50, b=10), legend=dict(orientation="h", y=-0.2))
-        st.plotly_chart(fig)
+        fig.add_hline(y=0, line_width=1, line_color=dd.REFERENCE)
+        fig.update_layout(barmode="group")
+        finish(fig, f"Net Sharpe by year, {cost} bps", 340)
     st.dataframe(style(dd.summary(returns, picks, cost, delay)))
 
 
@@ -164,13 +155,16 @@ def risk():
     market = returns["market.return"]
     lines({s: dd.rolling_beta(dd.net_returns(returns, s, cost), market) for s in main},
           "Rolling 63-day beta to SPY", "beta", hline=0)
-    lines({s: returns[f"{s}.net_exposure"] for s in main}, "Net dollar exposure (share of the book)",
-          hline=0, height=300)
-    lines({s: returns[f"{s}.turnover_d0"].rolling(21).mean() for s in main},
-          "Turnover, 21-day average (share of the book traded per day)", percent=True, height=300)
+    left, right = st.columns(2)
+    with left:
+        lines({s: returns[f"{s}.net_exposure"] for s in main}, "Net dollar exposure (share of the book)",
+              hline=0, height=320)
+    with right:
+        lines({s: returns[f"{s}.turnover_d0"].rolling(21).mean() for s in main},
+              "Turnover, 21-day average", percent=True, height=320)
     st.info("Why this matters: during development, a position cap applied after hedging let a model quietly "
             "go long the market, 80–90% correlated with the S&P 500. The cap now acts before hedging, and a "
-            "regression test checks that the capped book stays factor-neutral.")
+            "regression test checks that the capped book stays factor-neutral.", icon=":material/shield:")
 
 
 def signal():
@@ -181,24 +175,21 @@ def signal():
     days = pd.Index(sorted(sigs["date"].unique()))
     d = sigs[sigs["ticker"] == ticker].set_index("date").reindex(days)
 
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.55, 0.45], vertical_spacing=0.06,
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.55, 0.45], vertical_spacing=0.07,
                         subplot_titles=("OU s-score: how stretched the residual is",
                                         "Positions: OU (+1 long / −1 short) and model scores"))
-    fig.add_trace(go.Scatter(x=d.index, y=d["s_score"], name="s-score", line=dict(color="#444441", width=1.2)),
+    fig.add_trace(go.Scatter(x=d.index, y=d["s_score"], name="s-score", line=dict(color="#E6EDF3", width=1.3)),
                   row=1, col=1)
     for level, dash in [(1.25, "dash"), (-1.25, "dash"), (0.75, "dot"), (-0.5, "dot")]:
-        fig.add_hline(y=level, line_dash=dash, line_color="gray", line_width=1, row=1, col=1)
-    fig.add_trace(go.Scatter(x=d.index, y=d["ou"], name="OU position", line=dict(color=dd.COLORS["ou"],
-                                                                                 shape="hv", width=2)),
-                  row=2, col=1)
+        fig.add_hline(y=level, line_dash=dash, line_color=dd.REFERENCE, line_width=1, row=1, col=1)
+    fig.add_trace(go.Scatter(x=d.index, y=d["ou"], name="OU position",
+                             line=dict(color=dd.COLORS["ou"], shape="hv", width=2.4)), row=2, col=1)
     for s in ["mlp", "temporal_cnn", "transformer"]:
         if s in d:
             fig.add_trace(go.Scatter(x=d.index, y=d[s], name=f"{dd.NAMES[s]} score",
-                                     line=dict(color=dd.COLORS[s], width=1)), row=2, col=1)
-    fig.update_yaxes(range=[-4, 4], row=1, col=1)  # a few fits give |s| near 10; zoom out by dragging
-    fig.update_layout(height=560, hovermode="x unified", margin=dict(l=10, r=10, t=60, b=10),
-                      legend=dict(orientation="h", y=-0.08))
-    st.plotly_chart(fig)
+                                     line=dict(color=dd.COLORS[s], width=1.4)), row=2, col=1)
+    fig.update_yaxes(range=[-4, 4], row=1, col=1)  # a few fits give |s| near 10; drag to zoom out
+    finish(fig, f"{ticker}, {dd.PERIODS[period].lower()}", 600, legend_below=True)
     st.caption("Dashed lines: OU enters a long below −1.25 or a short above +1.25. Dotted lines: it exits a "
                "long above −0.5 and a short below +0.75. Model scores are standardized across stocks each "
                "day and averaged over the 3 seeds; above 0 means the model leans long. Gaps are days the "
@@ -206,27 +197,44 @@ def signal():
 
     left, right = st.columns(2)
     with left:
-        st.image(str(dd.FIGURES / "04_score_vs_sscore_test.png"),
-                 caption="Learned rule on the test years: revert moderate stretches, follow extreme ones.")
+        rule = rule_for(period)
+        fig = go.Figure([go.Scatter(x=rule.index, y=rule[s], name=dd.NAMES[s], mode="lines+markers",
+                                    line=dict(color=dd.COLORS[s], width=2.4)) for s in rule.columns])
+        fig.add_hline(y=0, line_width=1, line_color=dd.REFERENCE)
+        fig.update_xaxes(title="OU s-score bucket")
+        fig.update_layout(hovermode="closest")
+        finish(fig, "Learned rule: mean model score by stretch", 360, "standardized score")
+        st.caption("Below about |s| = 2 the networks bet on reversion (positive when the residual fell). "
+                   "Beyond it they follow the move, which OU never does. All stock-days, 3 seeds averaged.")
     with right:
-        st.image(str(dd.FIGURES / "04_attention.png"),
-                 caption="Transformer attention: mostly the last few days, plus a peak about 12 days back.")
+        att = dd.load_attention()
+        fig = go.Figure([go.Scatter(x=att.index, y=att[c], name=label, mode="lines+markers",
+                                    line=dict(color=color, width=2.4))
+                         for c, label, color in [("moderate", "moderate stretch, |s| < 2", "#58A6FF"),
+                                                 ("extreme", "extreme stretch, |s| ≥ 2", "#F2CC60")]])
+        fig.add_hline(y=1 / len(att), line_dash="dot", line_color=dd.REFERENCE)
+        fig.update_xaxes(title="day in the window (0 = decision day)")
+        fig.update_layout(hovermode="closest")
+        finish(fig, "Transformer attention by day", 360, "attention received")
+        st.caption("Last layer, test years, seed 0. Mostly the last few days, plus a peak about 12 days back, "
+                   "roughly one reversion half-life. The dotted line is uniform attention.")
 
 
 def integrity():
-    st.subheader("Rules fixed before the test")
+    st.markdown("#### Rules fixed before the test")
     st.markdown(f"The primary candidate, metric and pass/fail rules were written in "
                 f"[`docs/phase3_protocol.md`]({REPO}/blob/main/docs/phase3_protocol.md) and pushed to GitHub "
                 "before any test-year model result existed, so they couldn't be adjusted after seeing results.")
 
-    st.subheader("Every configuration tried")
-    t = trials().copy()
+    st.markdown("#### Every configuration tried")
+    t = dd.load_trials()
     t["strategy"] = t["model"].map(dd.NAMES)
     fig = go.Figure(go.Bar(x=t["val_sharpe"], y=t["strategy"] + ": " + t["config"], orientation="h",
                            marker_color=t["model"].map(dd.COLORS)))
-    fig.update_layout(title="Validation net Sharpe (2018–2019) of all 15 configurations", height=440,
-                      margin=dict(l=10, r=10, t=50, b=10), yaxis=dict(autorange="reversed"))
-    st.plotly_chart(fig)
+    fig.add_vline(x=0, line_width=1, line_color=dd.REFERENCE)
+    fig.update_yaxes(autorange="reversed")
+    fig.update_layout(hovermode="closest")
+    finish(fig, "Validation net Sharpe (2018–2019) of all 15 configurations", 460)
     daily = t["val_sharpe"] / np.sqrt(252)
     n, z = len(t), NormalDist()
     luck = daily.std() * ((1 - EULER_GAMMA) * z.inv_cdf(1 - 1 / n)
@@ -235,7 +243,7 @@ def integrity():
                 f"**{luck:.2f} by luck alone**. The Deflated Sharpe Ratio requires a result to clear that bar, "
                 "which is why it's stricter than the plain probability of a positive Sharpe.")
 
-    st.subheader("Ablation: costs in the training loss")
+    st.markdown("#### Ablation: costs in the training loss")
     pair = [s for s in ["transformer", "transformer_nocost"] if s in available]
     if len(pair) == 2:
         st.dataframe(style(dd.summary(returns, pair, cost)))
@@ -244,7 +252,7 @@ def integrity():
     else:
         st.caption("The ablation was run on the test years only; switch the period to 2020–2023.")
 
-    st.subheader("What the checks caught")
+    st.markdown("#### What the checks caught")
     with st.expander("NaN training blocks"):
         st.markdown("Random cut points occasionally produced a 1-day training block, whose Sharpe is undefined, "
                     "and the NaN silently poisoned the weights. The synthetic sanity check flagged it because "
@@ -261,5 +269,32 @@ def integrity():
                 "include a look-ahead test that scrambles future prices and checks nothing earlier changes.")
 
 
-{"Overview": overview, "Strategy explorer": explorer, "Risk and exposure": risk,
- "Inside the signal": signal, "Research integrity": integrity}[page]()
+# ---------------------------------------------------------------- layout
+nav = st.navigation([
+    st.Page(overview, title="Overview", icon=":material/dashboard:", url_path="overview", default=True),
+    st.Page(explorer, title="Strategies", icon=":material/show_chart:", url_path="strategies"),
+    st.Page(risk, title="Risk", icon=":material/balance:", url_path="risk"),
+    st.Page(signal, title="Signal", icon=":material/insights:", url_path="signal"),
+    st.Page(integrity, title="Integrity", icon=":material/verified:", url_path="integrity"),
+], position="top")
+
+head, period_col, cost_col = st.columns([2.2, 1.6, 2.2], vertical_alignment="center")
+head.markdown("## Sharpee")
+head.caption("Cost-aware deep learning for statistical arbitrage")
+period = period_col.segmented_control("Period", list(dd.PERIODS), default="test", key="period",
+                                      format_func=lambda p: "2020–2023 test" if p == "test" else "2024–2025 holdout")
+period = period or "test"
+cost = cost_col.slider("Cost per unit traded (bps)", 0, 30, 5, key="cost",
+                       help="Costs are linear in traded notional, so every number is recomputed exactly: "
+                            "net = gross − cost × turnover.")
+st.divider()
+
+returns = returns_for(period)
+available = dd.strategies_in(returns)
+main = [s for s in dd.MAIN if s in available]
+
+nav.run()
+
+st.divider()
+st.caption(f"[Code, notebooks, research report and write-up on GitHub]({REPO}) · "
+           "Research and educational project; not investment advice.")
