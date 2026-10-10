@@ -2,7 +2,7 @@
 
 A research framework that compares a classical mean-reversion strategy with neural trading models on US equities. The neural models are trained to maximize the **portfolio's Sharpe ratio after transaction costs**, not to forecast prices. Everything is evaluated walk-forward, with no look-ahead.
 
-> **Status: Phases 1 and 2 of 4 complete.** Data pipeline, factor residuals, OU baseline, backtester, and three neural models trained on Sharpe after costs and compared on validation data. Phase 3 (the sealed 2020–2023 test years and significance tests) is next (see [Roadmap](#roadmap)).
+> **Status: Phases 1-3 complete; the one-shot 2024–25 holdout is the last Phase 3 step.** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, and a pre-registered test on the sealed 2020–2023 years. Phase 4 (dashboard and report) follows (see [Roadmap](#roadmap)).
 
 **Built with:** Python, PyTorch, NumPy, pandas, SciPy, pytest, Jupyter.
 
@@ -13,6 +13,8 @@ A research framework that compares a classical mean-reversion strategy with neur
 | **Universe** | The 150 most liquid point-in-time S&P 500 stocks each day, 2010–2025 |
 | **Classic baseline (OU)**, test years 2020–2023 | Sharpe 0.94 before costs, 0.15 after 5 bps costs |
 | **Best neural model (Transformer)**, validation 2018–2019 | Net Sharpe +0.21 vs. OU's −0.35, with a third less trading |
+| **Pre-registered test, 2020–2023** | No reliable edge after costs: Transformer +0.17 vs. OU +0.15 net Sharpe, not statistically distinguishable |
+| **What held up** | Training on costs beat the same model without them in every seed; the learned models degrade about half as fast as OU with higher costs or a one-day delay |
 | **Market exposure** | Beta ≈ 0 for every strategy |
 | **Correctness** | 53 tests, a look-ahead test and a synthetic sanity check; 3 bugs caught and fixed |
 
@@ -99,11 +101,38 @@ Strategy performance:
 
 **Why everything is built this way:** [reports/README.md](reports/README.md) walks through 14 figures from both phases (data coverage, fat tails, factor structure, residual autocorrelation, half-lives, costs, training stability, turnover, what the networks learned) and the design decision each one supports.
 
+## Phase 3: the sealed test years, 2020–2023
+
+The rules were committed in [`docs/phase3_protocol.md`](docs/phase3_protocol.md) **before** any test-year model result existed. Each neural model was retrained every year (walk-forward) with frozen settings and 3 seeds, and the Transformer was named the primary candidate in advance.
+
+| Pre-registered rule for the Transformer | Result | Needed | Outcome |
+|---|---|---|---|
+| 1. Edge after costs (Probabilistic Sharpe Ratio) | 0.64 | ≥ 0.95 | fail |
+| 2. Survives 15 configurations tried (Deflated Sharpe Ratio) | 0.24 | ≥ 0.95 | fail |
+| 3. Beats OU (paired bootstrap Sharpe difference) | +0.03, 95% CI −0.84 to +0.98 | interval excludes 0 | fail |
+
+**Verdict: no reliable edge after costs.**
+
+| Net Sharpe, 2020–2023 | 0 bps | 5 bps | 10 bps | 20 bps | 5 bps, one day late | Turnover per day |
+|---|---|---|---|---|---|---|
+| OU | **0.94** | 0.15 | −0.65 | −2.24 | −0.44 | 23.8% |
+| MLP | 0.55 | 0.16 | −0.23 | −1.01 | −0.02 | 19.0% |
+| Temporal CNN | 0.34 | −0.12 | −0.58 | −1.50 | −0.25 | 20.8% |
+| **Transformer** | 0.51 | **0.17** | **−0.16** | **−0.83** | **−0.03** | **15.6%** |
+
+![Cost and delay](reports/figures/04_cost_and_delay.png)
+
+- **No winner at 5 bps.** The Transformer earns +0.17 against OU's +0.15, and with only four years of data the intervals are about 1.8 Sharpe points wide.
+- **The learned models are far more robust.** OU has the strongest raw signal but needs cheap, immediate execution. The Transformer trades a third less, so it degrades about half as fast as costs rise and barely notices a one-day delay.
+- **Costs in the loss work.** Retraining the same Transformer without costs in its loss made it worse in every seed (combined +0.17 vs −0.08) and raised turnover from 15.6% to 23.7%.
+- **The learned rule holds out of sample:** revert moderate residual moves, follow extreme ones.
+- **One seed broke in one year.** Seed 0's 2023 model never trained past its starting point and lost heavily; the protocol keeps it in. Full details: [findings write-up](reports/README.md#phase-3-the-sealed-test-years-2020-2023) and [notebook 04](notebooks/04_results.ipynb).
+
 ## How correctness is verified
 
 - **Look-ahead test:** scramble every price after a cutoff date, rebuild the whole pipeline, and assert that every residual, signal, weight and model score on or before the cutoff is unchanged.
 - **Synthetic sanity check:** with planted mean reversion, OU and all three networks must win (net Sharpe +19 to +22). With pure random-walk residuals, none may earn anything (net Sharpe at or below zero). Networks are scored on a held-out segment, so a lucky validation period can't pass.
-- **53 unit tests:** hand-worked P&L, cost and timing examples; the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`; eligibility rules; portfolio constraints, including that the capped book stays factor-neutral; the loss and its gradients; metrics.
+- **59 unit tests:** hand-worked P&L, cost and timing examples; the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`; eligibility rules; portfolio constraints, including that the capped book stays factor-neutral; the loss and its gradients; metrics; and PSR, DSR and bootstrap intervals against hand-computed values.
 
 ### What the checks caught
 
@@ -125,16 +154,18 @@ python scripts/run_baseline.py       # OU baseline -> reports/
 python scripts/sanity_synthetic.py   # pipeline check on synthetic markets
 python scripts/run_baseline.py --tune                     # OU threshold on Fold 1 validation
 python scripts/train_model.py --model transformer --tune  # same for mlp and temporal_cnn; --resume skips logged configs
+python scripts/walk_forward.py --model transformer        # yearly retraining on 2020-2023 (also mlp, temporal_cnn; --no-cost for the ablation)
+python scripts/run_backtest.py                           # test-year results, significance tests and the verdict
 pytest
 ```
 
-The notebooks run top to bottom with the project's environment, e.g. `python -m nbconvert --to notebook --execute --inplace notebooks/03_train_models.ipynb`.
+The notebooks run top to bottom with the project's environment, e.g. `python -m nbconvert --to notebook --execute --inplace notebooks/04_results.ipynb`.
 
 ## Repository layout
 
 ```
 configs/          data, experiment, OU baseline and model settings (YAML)
-docs/             full project plan (v2)
+docs/             full project plan (v2) and the pre-registered Phase 3 protocol
 src/sharpee/
   data/           universe, download, cleaning + eligibility, synthetic markets
   features/       returns, rolling PCA residuals, diagnostics
@@ -143,18 +174,18 @@ src/sharpee/
   backtest/       accounting and costs, backtest engine
   models/         MLP, temporal CNN, Transformer (+ vendored encoder blocks)
   training/       day-block dataset, Sharpe-after-costs loss, training loop, trial log, tuning
-  evaluation/     metrics, walk-forward folds
-notebooks/        01 data exploration, 02 residual analysis, 03 model training (outputs saved, readable on GitHub)
-scripts/          download_data, run_baseline, train_model, sanity_synthetic
-tests/            53 tests, including the look-ahead test
-reports/          results tables, figures and the findings write-up (Phases 1–2)
+  evaluation/     metrics, walk-forward folds, significance tests (PSR, DSR, bootstrap)
+notebooks/        01 data exploration, 02 residual analysis, 03 model training, 04 results (outputs saved, readable on GitHub)
+scripts/          download_data, run_baseline, train_model, walk_forward, run_backtest, sanity_synthetic
+tests/            59 tests, including the look-ahead test
+reports/          results tables, figures, Phase 3 results and the findings write-up
 ```
 
 ## Roadmap
 
 1. ~~**Data and baseline:** universe, residuals, OU, backtester, tests~~ ✅
 2. ~~**Neural models:** MLP, temporal CNN and a compact Transformer, trained end-to-end on Sharpe after costs and tuned on Fold 1 only, with every configuration logged~~ ✅
-3. **Evaluation:** a pre-registered protocol committed before any test results; yearly walk-forward retraining on 2020–2023; significance tests (Probabilistic and Deflated Sharpe Ratio, block-bootstrap confidence intervals); cost and delay sensitivity; an ablation that trains without costs in the loss; then the one-shot 2024–25 holdout.
+3. ~~**Evaluation:** a pre-registered protocol, yearly walk-forward retraining on 2020–2023, significance tests, cost and delay sensitivity, and the costs-in-loss ablation~~ ✅ The one-shot 2024–25 holdout is the last step.
 4. **Delivery:** Streamlit dashboard and research report.
 
 ## Limitations
@@ -163,7 +194,7 @@ reports/          results tables, figures and the findings write-up (Phases 1–
 - **Some tickers are reused.** A few delisted symbols (e.g. `CPWR`) now belong to unrelated securities on Yahoo. The price and liquidity filters keep all of them out of the tradable universe; [notebook 01](notebooks/01_data_exploration.ipynb) shows the check.
 - **Simplified execution.** Trades happen at the closing price, costs are a flat proportional rate, and weights don't drift between daily rebalances.
 - **Simplified relative to Avellaneda–Lee.** PCA factors are refit monthly rather than daily, and the s-score has no drift adjustment.
-- **Small validation sample.** Phase 2 compares strategies on two years of validation data, so differences between them are not yet statistically meaningful.
+- **Short samples.** Phase 2 compares strategies on two validation years and Phase 3 on four test years. At this length, Sharpe ratios within about one point of each other can't be told apart statistically.
 
 ## References
 
