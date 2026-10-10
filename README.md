@@ -19,7 +19,7 @@ A research framework that compares a classical mean-reversion strategy with neur
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["S&P 500 membership + Yahoo prices"] --> B["Daily eligibility: 150 most liquid"]
     B --> C["Rolling PCA: residual returns"]
     C --> D1["OU s-score rules"]
@@ -27,7 +27,6 @@ flowchart LR
     D1 --> E["Portfolio layer: cap each bet, then hedge (x = Φᵀw)"]
     D2 --> E
     E --> F["Backtest: next-day returns minus costs"]
-    F -. trains on Sharpe after costs .-> D2
 ```
 
 1. **Remove what the market and sectors did.** Each stock's daily return is split into a part explained by 5 PCA factors and a stock-specific **residual**.
