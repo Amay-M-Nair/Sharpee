@@ -182,7 +182,7 @@ Bucketing stock-days by OU s-score shows that all three networks independently l
 nonlinear rule: **revert moderate stretches** (|s| below about 2), like OU, but **follow extreme ones**,
 most strongly after large up-moves. Large residual moves are often news-driven, and news-driven moves tend
 to keep drifting; OU fades them by construction. The pattern holds on the test years for the MLP and
-Transformer. The Transformer's attention concentrates on the last three days of its window, with a second
+Transformer, and for the temporal CNN when its three seeds are averaged. The Transformer's attention concentrates on the last three days of its window, with a second
 peak about 12 days back, roughly one reversion half-life; attention shows where the model looks, not why.
 
 ## 9. Limitations

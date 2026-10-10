@@ -248,7 +248,7 @@ The rules were fixed in [`docs/phase3_protocol.md`](../docs/phase3_protocol.md) 
 
 ![Attention](figures/04_attention.png)
 
-**What it shows.** On the test years, the MLP and Transformer still revert moderate residual stretches and follow extreme ones, as they did on validation; the temporal CNN keeps the reversion but loses the continuation tail. The Transformer's attention concentrates on the last three days of its 30-day window, with a second peak about 12 days back, which reads like comparing where a residual is now with where it was about one reversion half-life ago (median 8.6 days). Attention shows where the model looks, not why it decides, so this is descriptive only.
+**What it shows.** On the test years, the MLP and Transformer still revert moderate residual stretches and follow extreme ones, as they did on validation; for seed 0 the temporal CNN keeps the reversion but loses the continuation tail, although averaged over its three seeds it shows the tail too. The Transformer's attention concentrates on the last three days of its 30-day window, with a second peak about 12 days back, which reads like comparing where a residual is now with where it was about one reversion half-life ago (median 8.6 days). Attention shows where the model looks, not why it decides, so this is descriptive only.
 
 ---
 
