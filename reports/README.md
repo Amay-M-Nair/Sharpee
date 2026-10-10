@@ -1,6 +1,6 @@
 # Findings: the evidence behind Sharpee's design
 
-Each figure below comes from the notebooks ([01 data exploration](../notebooks/01_data_exploration.ipynb), [02 residual analysis](../notebooks/02_residual_analysis.ipynb), [03 model training](../notebooks/03_train_models.ipynb)) or from `scripts/run_baseline.py`, and rerunning them regenerates it. Every section covers what the data shows and which design decision it justifies. Sections 1-10 are Phase 1 (data and baseline); sections 11-14 are Phase 2 (neural models).
+Each figure below comes from the notebooks ([01 data exploration](../notebooks/01_data_exploration.ipynb), [02 residual analysis](../notebooks/02_residual_analysis.ipynb), [03 model training](../notebooks/03_train_models.ipynb), [04 results](../notebooks/04_results.ipynb)) or from `scripts/run_baseline.py`, and rerunning them regenerates it. Every section covers what the data shows and which design decision it justifies. Sections 1-10 are Phase 1 (data and baseline), sections 11-14 are Phase 2 (neural models), and sections 15-19 are Phase 3 (the sealed test years).
 
 ---
 
@@ -166,3 +166,88 @@ All Phase 2 numbers use Fold 1 only: training on 2010-2017 and validation on 201
 - **Extreme stretches: continuation**, strongest after large up-moves.
 
 **Why it matters.** Large residual moves are often news, such as earnings or guidance, rather than liquidity noise, and news-driven moves tend to keep drifting instead of reverting. OU shorts every s > 1.25 regardless, so it trades against exactly those moves. The networks found a nonlinear rule that the classic model can't express, without being told to look for one.
+
+---
+
+# Phase 3: the sealed test years, 2020-2023
+
+The rules were fixed in [`docs/phase3_protocol.md`](../docs/phase3_protocol.md) and pushed before any of these results existed. Each neural model was retrained every year with the frozen Fold 1 settings, using seeds 0, 1 and 2, and each model's seeds are combined with one third of capital in each seed's book. All numbers are net of 5 bps unless stated otherwise.
+
+---
+
+## 15. The verdict: no reliable edge after costs
+
+![Sharpe intervals](figures/04_sharpe_intervals.png)
+
+| Pre-registered rule for the Transformer | Result | Needed | Outcome |
+|---|---|---|---|
+| 1. Edge after costs: PSR | 0.64 | ≥ 0.95 | fail |
+| 2. Survives 15 configurations: DSR | 0.24 | ≥ 0.95 | fail |
+| 3. Beats OU: paired Sharpe difference | +0.03 (95% CI −0.84 to +0.98) | interval excludes 0 | fail |
+
+| Strategy | Net Sharpe (95% CI) | Gross Sharpe | Turnover per day | Beta |
+|---|---|---|---|---|
+| OU | +0.15 (−0.98 to +1.22) | 0.94 | 23.8% | 0.05 |
+| MLP | +0.16 (−0.79 to +1.01) | 0.55 | 19.0% | 0.08 |
+| Temporal CNN | −0.12 (−1.10 to +0.71) | 0.34 | 20.8% | 0.06 |
+| **Transformer** | **+0.17 (−0.72 to +1.08)** | 0.51 | **15.6%** | 0.07 |
+
+**What it shows.** The Transformer earned slightly more than OU after costs, but the intervals are about 1.8 Sharpe points wide: with four years of daily data, Sharpe ratios this close can't be told apart. Under the wording fixed in advance, the verdict is "no reliable edge after costs".
+
+**Why this is still a useful result.** It is the honest answer to the project's question on this data, it was decided by rules committed before the test, and the sections below show where the models genuinely differ.
+
+---
+
+## 16. How the four years unfolded
+
+![Test equity](figures/04_test_equity.png)
+
+![Sharpe by year](figures/04_sharpe_by_year.png)
+
+**What it shows.** Every strategy fell in the March 2020 crash. OU recovered fastest and had its best year in 2020 (Sharpe 1.23) but its worst in 2022 (−1.26). The Transformer led from mid-2021 to late 2022 (Sharpe 0.96 in 2021) and lost in 2023 (−1.52).
+
+**Why 2023 went wrong.** Seed 0's 2023 model never improved on its starting point during training (best validation Sharpe −1.43 at epoch 0) and lost heavily (2023 Sharpe −3.44); the other two seeds earned +0.33 and +0.37 that year. The protocol keeps every seed, so this stays in the result. A rule like "don't trade a model whose validation Sharpe is negative" would be a sensible safeguard for future work, but adding it now would mean fitting to the test years.
+
+---
+
+## 17. The learned models are much more robust to costs and delays
+
+![Cost and delay](figures/04_cost_and_delay.png)
+
+| Net Sharpe | 0 bps | 5 bps | 10 bps | 20 bps | 5 bps, one day late |
+|---|---|---|---|---|---|
+| OU | **0.94** | 0.15 | −0.65 | −2.24 | −0.44 |
+| MLP | 0.55 | 0.16 | −0.23 | −1.01 | −0.02 |
+| Temporal CNN | 0.34 | −0.12 | −0.58 | −1.50 | −0.25 |
+| Transformer | 0.51 | **0.17** | **−0.16** | **−0.83** | **−0.03** |
+
+**What it shows.** OU has the strongest raw signal, but it depends on trading cheaply and immediately: every extra 5 bps costs it about 0.8 Sharpe points, and a one-day delay turns it negative. The Transformer gives up part of the gross signal in exchange for trading a third less, so it degrades about half as fast with costs and barely notices the delay.
+
+**Design decision.** This is the practical case for training on returns after costs: the model learned a cheaper-to-run version of the strategy.
+
+---
+
+## 18. Costs in the loss: the ablation
+
+![Ablation](figures/04_ablation_costs.png)
+
+| Transformer, net of 5 bps | Seed 0 | Seed 1 | Seed 2 | Combined | Turnover per day |
+|---|---|---|---|---|---|
+| Costs in the training loss | −0.16 | +0.34 | +0.31 | **+0.17** | 15.6% |
+| No costs in the training loss | −0.23 | −0.02 | +0.02 | −0.08 | 23.7% |
+
+**What it shows.** The same Transformer (architecture, settings, seeds and folds) was retrained with the cost set to zero inside its loss. The cost-trained version was better in **every seed** and traded less in every seed. Its gross Sharpe was higher too (0.51 vs 0.42), so it didn't only trade less: what it traded was better.
+
+**Why it matters.** This tests the project's central design choice directly, and it holds consistently, although it is not a formal significance test.
+
+---
+
+## 19. The learned rule holds out of sample
+
+![Score vs s-score, test years](figures/04_score_vs_sscore_test.png)
+
+![Attention](figures/04_attention.png)
+
+**What it shows.** On the test years, the MLP and Transformer still revert moderate residual stretches and follow extreme ones, as they did on validation; the temporal CNN keeps the reversion but loses the continuation tail. The Transformer's attention concentrates on the last three days of its 30-day window, with a second peak about 12 days back, which reads like comparing where a residual is now with where it was about one reversion half-life ago (median 8.6 days). Attention shows where the model looks, not why it decides, so this is descriptive only.
+
+**Bottom line of Phase 3.** The learned models reproduce the classic signal, add a nonlinear twist that holds out of sample, and are far cheaper to run. But four years of S&P 500 data can't show that any of them earns more than the textbook OU rule after costs.
