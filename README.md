@@ -145,13 +145,13 @@ Full details: [findings write-up](reports/README.md#phase-3-the-sealed-test-year
 
 ## Interactive dashboard
 
-A Streamlit app lets anyone explore the results without running the research:
+A dark-themed Streamlit app with a top navigation bar lets anyone explore the results without running the research. A control strip under the bar switches between the 2020–2023 test years and the 2024–2025 holdout and sets the trading cost for every page:
 
 - **Overview:** the pre-registered verdict, headline numbers and confidence intervals.
-- **Strategy explorer:** equity, drawdown, Sharpe by year, a one-day execution-delay toggle, and a **cost slider** that recomputes every number exactly (costs are linear in traded notional).
-- **Risk and exposure:** rolling beta, net exposure and turnover, the ongoing check that every book stays market-neutral.
-- **Inside the signal:** pick any stock to see its s-score with OU's trades and each network's scores, plus the learned rule and Transformer attention.
-- **Research integrity:** the protocol, all 15 configurations tried, the costs-in-loss ablation, and the bugs the checks caught.
+- **Strategies:** equity, drawdown, Sharpe vs cost and by year, and a one-day execution-delay toggle. The **cost slider** recomputes every number exactly (costs are linear in traded notional).
+- **Risk:** rolling beta, net exposure and turnover, the ongoing check that every book stays market-neutral.
+- **Signal:** pick any stock to see its s-score with OU's trades and each network's scores, plus the learned rule and Transformer attention.
+- **Integrity:** the protocol, all 15 configurations tried, the costs-in-loss ablation, and the bugs the checks caught.
 
 It reads only small result files in `reports/` (no models or price data), so it loads instantly:
 
@@ -166,7 +166,7 @@ To host it for free, deploy the repository on [Streamlit Community Cloud](https:
 
 - **Look-ahead test:** scramble every price after a cutoff date, rebuild the whole pipeline, and assert that every residual, signal, weight and model score on or before the cutoff is unchanged.
 - **Synthetic sanity check:** with planted mean reversion, OU and all three networks must win (net Sharpe +19 to +22). With pure random-walk residuals, none may earn anything (net Sharpe at or below zero). Networks are scored on a held-out segment, so a lucky validation period can't pass.
-- **64 unit tests:** hand-worked P&L, cost and timing examples; the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`; eligibility rules; portfolio constraints, including that the capped book stays factor-neutral; the loss and its gradients; metrics; PSR, DSR and bootstrap intervals against hand-computed values; and the dashboard's numbers against the official Phase 3 results.
+- **66 unit tests:** hand-worked P&L, cost and timing examples; the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`; eligibility rules; portfolio constraints, including that the capped book stays factor-neutral; the loss and its gradients; metrics; PSR, DSR and bootstrap intervals against hand-computed values; and the dashboard's numbers against the official Phase 3 results.
 
 ### What the checks caught
 
@@ -214,7 +214,7 @@ src/sharpee/
   evaluation/     metrics, walk-forward folds, significance tests (PSR, DSR, bootstrap), strategy books
 notebooks/        01 data exploration, 02 residual analysis, 03 model training, 04 results (outputs saved, readable on GitHub)
 scripts/          download_data, run_baseline, train_model, walk_forward, run_backtest, export_dashboard, sanity_synthetic
-tests/            64 tests, including the look-ahead test
+tests/            66 tests, including the look-ahead test
 reports/          research report, findings write-up, figures, Phase 3 results and dashboard data
 ```
 

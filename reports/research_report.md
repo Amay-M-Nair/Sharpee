@@ -85,7 +85,7 @@ is penalized directly.
 ## 4. Development: what the checks caught
 
 The pipeline is guarded by a look-ahead test (scramble every price after a cutoff date and assert that
-nothing decided earlier changes), 64 unit tests, and a synthetic sanity check (with planted mean
+nothing decided earlier changes), 66 unit tests, and a synthetic sanity check (with planted mean
 reversion every strategy must win; with pure noise none may). They caught three silent bugs:
 
 1. **NaN training blocks.** Random cut points occasionally produced a 1-day block whose Sharpe is
