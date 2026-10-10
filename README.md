@@ -2,9 +2,11 @@
 
 A research framework that compares a classical mean-reversion strategy with neural trading models on US equities. The neural models are trained to maximize the **portfolio's Sharpe ratio after transaction costs**, not to forecast prices. Everything is evaluated walk-forward, with no look-ahead.
 
-> **Status: Phases 1-3 of 4 complete.** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, a pre-registered test on the sealed 2020–2023 years, and a one-shot 2024–25 holdout. Phase 4 (dashboard and report) is next (see [Roadmap](#roadmap)).
+> **Status: research complete (Phases 1-3), dashboard and report built (Phase 4a).** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, a pre-registered test on the sealed 2020–2023 years, a one-shot 2024–25 holdout, an interactive dashboard and a [research report](reports/research_report.md). Live paper trading with GitHub Actions and MLflow tracking come next (Phase 4b).
 
-**Built with:** Python, PyTorch, NumPy, pandas, SciPy, pytest, Jupyter.
+**Built with:** Python, PyTorch, NumPy, pandas, SciPy, Streamlit, Plotly, pytest, Jupyter.
+
+**Read more:** [research report](reports/research_report.md) · [findings, figure by figure](reports/README.md) · [interactive dashboard](#interactive-dashboard)
 
 ## At a glance
 
@@ -141,11 +143,30 @@ Every strategy lost, even before costs: residual mean reversion broke down in 20
 
 Full details: [findings write-up](reports/README.md#phase-3-the-sealed-test-years-2020-2023) and [notebook 04](notebooks/04_results.ipynb).
 
+## Interactive dashboard
+
+A Streamlit app lets anyone explore the results without running the research:
+
+- **Overview:** the pre-registered verdict, headline numbers and confidence intervals.
+- **Strategy explorer:** equity, drawdown, Sharpe by year, a one-day execution-delay toggle, and a **cost slider** that recomputes every number exactly (costs are linear in traded notional).
+- **Risk and exposure:** rolling beta, net exposure and turnover, the ongoing check that every book stays market-neutral.
+- **Inside the signal:** pick any stock to see its s-score with OU's trades and each network's scores, plus the learned rule and Transformer attention.
+- **Research integrity:** the protocol, all 15 configurations tried, the costs-in-loss ablation, and the bugs the checks caught.
+
+It reads only small result files in `reports/` (no models or price data), so it loads instantly:
+
+```bash
+pip install -r app/requirements.txt
+streamlit run app/dashboard.py
+```
+
+To host it for free, deploy the repository on [Streamlit Community Cloud](https://share.streamlit.io) with `app/dashboard.py` as the entry point; it installs the light `app/requirements.txt`.
+
 ## How correctness is verified
 
 - **Look-ahead test:** scramble every price after a cutoff date, rebuild the whole pipeline, and assert that every residual, signal, weight and model score on or before the cutoff is unchanged.
 - **Synthetic sanity check:** with planted mean reversion, OU and all three networks must win (net Sharpe +19 to +22). With pure random-walk residuals, none may earn anything (net Sharpe at or below zero). Networks are scored on a held-out segment, so a lucky validation period can't pass.
-- **59 unit tests:** hand-worked P&L, cost and timing examples; the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`; eligibility rules; portfolio constraints, including that the capped book stays factor-neutral; the loss and its gradients; metrics; and PSR, DSR and bootstrap intervals against hand-computed values.
+- **64 unit tests:** hand-worked P&L, cost and timing examples; the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`; eligibility rules; portfolio constraints, including that the capped book stays factor-neutral; the loss and its gradients; metrics; PSR, DSR and bootstrap intervals against hand-computed values; and the dashboard's numbers against the official Phase 3 results.
 
 ### What the checks caught
 
@@ -169,6 +190,8 @@ python scripts/run_baseline.py --tune                     # OU threshold on Fold
 python scripts/train_model.py --model transformer --tune  # same for mlp and temporal_cnn; --resume skips logged configs
 python scripts/walk_forward.py --model transformer        # yearly retraining on 2020-2023 (also mlp, temporal_cnn; --no-cost for the ablation)
 python scripts/run_backtest.py                           # test-year results, significance tests and the verdict
+python scripts/export_dashboard.py                       # small result files for the dashboard
+streamlit run app/dashboard.py
 pytest
 ```
 
@@ -177,6 +200,7 @@ The notebooks run top to bottom with the project's environment, e.g. `python -m 
 ## Repository layout
 
 ```
+app/              Streamlit dashboard and its data layer
 configs/          data, experiment, OU baseline and model settings (YAML)
 docs/             full project plan (v2) and the pre-registered Phase 3 protocol
 src/sharpee/
@@ -187,11 +211,11 @@ src/sharpee/
   backtest/       accounting and costs, backtest engine
   models/         MLP, temporal CNN, Transformer (+ vendored encoder blocks)
   training/       day-block dataset, Sharpe-after-costs loss, training loop, trial log, tuning
-  evaluation/     metrics, walk-forward folds, significance tests (PSR, DSR, bootstrap)
+  evaluation/     metrics, walk-forward folds, significance tests (PSR, DSR, bootstrap), strategy books
 notebooks/        01 data exploration, 02 residual analysis, 03 model training, 04 results (outputs saved, readable on GitHub)
-scripts/          download_data, run_baseline, train_model, walk_forward, run_backtest, sanity_synthetic
-tests/            59 tests, including the look-ahead test
-reports/          results tables, figures, Phase 3 results and the findings write-up
+scripts/          download_data, run_baseline, train_model, walk_forward, run_backtest, export_dashboard, sanity_synthetic
+tests/            64 tests, including the look-ahead test
+reports/          research report, findings write-up, figures, Phase 3 results and dashboard data
 ```
 
 ## Roadmap
@@ -199,7 +223,9 @@ reports/          results tables, figures, Phase 3 results and the findings writ
 1. ~~**Data and baseline:** universe, residuals, OU, backtester, tests~~ ✅
 2. ~~**Neural models:** MLP, temporal CNN and a compact Transformer, trained end-to-end on Sharpe after costs and tuned on Fold 1 only, with every configuration logged~~ ✅
 3. ~~**Evaluation:** a pre-registered protocol, yearly walk-forward retraining on 2020–2023, significance tests, cost and delay sensitivity, the costs-in-loss ablation, and the one-shot 2024–25 holdout~~ ✅
-4. **Delivery:** Streamlit dashboard and research report.
+4. **Delivery:**
+   - ~~**4a:** interactive Streamlit dashboard and research report~~ ✅
+   - **4b:** live paper-trading tracker (a daily GitHub Actions job runs the frozen models after the close and records an out-of-sample track record) and MLflow experiment tracking.
 
 ## Limitations
 
