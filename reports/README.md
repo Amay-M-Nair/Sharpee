@@ -1,6 +1,6 @@
 # Findings: the evidence behind Sharpee's design
 
-Each figure below comes from the notebooks ([01 data exploration](../notebooks/01_data_exploration.ipynb), [02 residual analysis](../notebooks/02_residual_analysis.ipynb), [03 model training](../notebooks/03_train_models.ipynb), [04 results](../notebooks/04_results.ipynb)) or from `scripts/run_baseline.py`, and rerunning them regenerates it. Every section covers what the data shows and which design decision it justifies. Sections 1-10 are Phase 1 (data and baseline), sections 11-14 are Phase 2 (neural models), and sections 15-19 are Phase 3 (the sealed test years).
+Each figure below comes from the notebooks ([01 data exploration](../notebooks/01_data_exploration.ipynb), [02 residual analysis](../notebooks/02_residual_analysis.ipynb), [03 model training](../notebooks/03_train_models.ipynb), [04 results](../notebooks/04_results.ipynb)) or from `scripts/run_baseline.py`, and rerunning them regenerates it. Every section covers what the data shows and which design decision it justifies. Sections 1-10 are Phase 1 (data and baseline), sections 11-14 are Phase 2 (neural models), and sections 15-20 are Phase 3 (the sealed test years and the holdout).
 
 ---
 
@@ -250,4 +250,21 @@ The rules were fixed in [`docs/phase3_protocol.md`](../docs/phase3_protocol.md) 
 
 **What it shows.** On the test years, the MLP and Transformer still revert moderate residual stretches and follow extreme ones, as they did on validation; the temporal CNN keeps the reversion but loses the continuation tail. The Transformer's attention concentrates on the last three days of its 30-day window, with a second peak about 12 days back, which reads like comparing where a residual is now with where it was about one reversion half-life ago (median 8.6 days). Attention shows where the model looks, not why it decides, so this is descriptive only.
 
-**Bottom line of Phase 3.** The learned models reproduce the classic signal, add a nonlinear twist that holds out of sample, and are far cheaper to run. But four years of S&P 500 data can't show that any of them earns more than the textbook OU rule after costs.
+---
+
+## 20. The one-shot holdout, 2024-2025: the signal stops working
+
+![Holdout equity](figures/04_holdout_equity.png)
+
+| 2024-2025, net of 5 bps | Gross Sharpe | Net Sharpe (95% CI) | Turnover per day |
+|---|---|---|---|
+| OU | −0.77 | **−1.65** (−3.01 to −0.33) | 22.8% |
+| MLP | −0.03 | −0.48 (−1.74 to +0.72) | 16.3% |
+| Temporal CNN | −0.32 | −0.78 (−2.06 to +0.47) | 17.3% |
+| **Transformer** | −0.16 | **−0.55** (−1.79 to +0.59) | 13.1% |
+
+**What it shows.** Run once, after every earlier result was committed, with the same frozen settings (trained on 2010-2021, validated on 2022-2023). Every strategy lost money, and even before costs: residual mean reversion broke down, and 2024 was the worst year for all of them. This matches section 5, where the first factor's share of variance fell to multi-year lows in 2024: stocks moved on their own stories, in a period widely described as a concentrated, AI-led rally, and kept trending instead of reverting. The verdict is again "no reliable edge after costs".
+
+**What held up anyway.** The learned models lost far less than OU (Transformer −0.55 vs −1.65; paired difference +1.10, 95% CI −0.16 to +2.46, just short of excluding zero), helped by trading less and by following extreme moves instead of fading them. In 2025 the MLP and Transformer were slightly positive again (+0.38 and +0.18), while OU stayed negative (−0.83).
+
+**Bottom line of Phase 3.** The learned models reproduce the classic signal, add a nonlinear twist that holds out of sample, and are far cheaper to run, which made them much more resilient when the signal broke down. But neither the four test years nor the holdout show that any of them reliably earns money after costs.
