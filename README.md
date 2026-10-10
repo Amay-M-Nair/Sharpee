@@ -2,7 +2,7 @@
 
 A research framework that compares a classical mean-reversion strategy with neural trading models on US equities. The neural models are trained to maximize the **portfolio's Sharpe ratio after transaction costs**, not to forecast prices. Everything is evaluated walk-forward, with no look-ahead.
 
-> **Status: Phases 1-3 complete; the one-shot 2024–25 holdout is the last Phase 3 step.** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, and a pre-registered test on the sealed 2020–2023 years. Phase 4 (dashboard and report) follows (see [Roadmap](#roadmap)).
+> **Status: Phases 1-3 of 4 complete.** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, a pre-registered test on the sealed 2020–2023 years, and a one-shot 2024–25 holdout. Phase 4 (dashboard and report) is next (see [Roadmap](#roadmap)).
 
 **Built with:** Python, PyTorch, NumPy, pandas, SciPy, pytest, Jupyter.
 
@@ -14,6 +14,7 @@ A research framework that compares a classical mean-reversion strategy with neur
 | **Classic baseline (OU)**, test years 2020–2023 | Sharpe 0.94 before costs, 0.15 after 5 bps costs |
 | **Best neural model (Transformer)**, validation 2018–2019 | Net Sharpe +0.21 vs. OU's −0.35, with a third less trading |
 | **Pre-registered test, 2020–2023** | No reliable edge after costs: Transformer +0.17 vs. OU +0.15 net Sharpe, not statistically distinguishable |
+| **One-shot holdout, 2024–2025** | Every strategy lost as residual reversion broke down; the learned models lost far less (Transformer −0.55 vs. OU −1.65) |
 | **What held up** | Training on costs beat the same model without them in every seed; the learned models degrade about half as fast as OU with higher costs or a one-day delay |
 | **Market exposure** | Beta ≈ 0 for every strategy |
 | **Correctness** | 53 tests, a look-ahead test and a synthetic sanity check; 3 bugs caught and fixed |
@@ -126,7 +127,19 @@ The rules were committed in [`docs/phase3_protocol.md`](docs/phase3_protocol.md)
 - **The learned models are far more robust.** OU has the strongest raw signal but needs cheap, immediate execution. The Transformer trades a third less, so it degrades about half as fast as costs rise and barely notices a one-day delay.
 - **Costs in the loss work.** Retraining the same Transformer without costs in its loss made it worse in every seed (combined +0.17 vs −0.08) and raised turnover from 15.6% to 23.7%.
 - **The learned rule holds out of sample:** revert moderate residual moves, follow extreme ones.
-- **One seed broke in one year.** Seed 0's 2023 model never trained past its starting point and lost heavily; the protocol keeps it in. Full details: [findings write-up](reports/README.md#phase-3-the-sealed-test-years-2020-2023) and [notebook 04](notebooks/04_results.ipynb).
+- **One seed broke in one year.** Seed 0's 2023 model never trained past its starting point and lost heavily; the protocol keeps it in.
+
+### The one-shot holdout, 2024–2025
+
+Run once, after all of the above was committed, with the same frozen settings:
+
+| Net Sharpe, 5 bps | OU | MLP | Temporal CNN | Transformer |
+|---|---|---|---|---|
+| 2024–2025 | −1.65 | −0.48 | −0.78 | **−0.55** |
+
+Every strategy lost, even before costs: residual mean reversion broke down in 2024, when the first factor's share of variance hit multi-year lows and stocks kept trending on their own stories. The learned models lost far less than OU, helped by trading less and by following extreme moves instead of fading them. The verdict is again **no reliable edge after costs**.
+
+Full details: [findings write-up](reports/README.md#phase-3-the-sealed-test-years-2020-2023) and [notebook 04](notebooks/04_results.ipynb).
 
 ## How correctness is verified
 
@@ -185,7 +198,7 @@ reports/          results tables, figures, Phase 3 results and the findings writ
 
 1. ~~**Data and baseline:** universe, residuals, OU, backtester, tests~~ ✅
 2. ~~**Neural models:** MLP, temporal CNN and a compact Transformer, trained end-to-end on Sharpe after costs and tuned on Fold 1 only, with every configuration logged~~ ✅
-3. ~~**Evaluation:** a pre-registered protocol, yearly walk-forward retraining on 2020–2023, significance tests, cost and delay sensitivity, and the costs-in-loss ablation~~ ✅ The one-shot 2024–25 holdout is the last step.
+3. ~~**Evaluation:** a pre-registered protocol, yearly walk-forward retraining on 2020–2023, significance tests, cost and delay sensitivity, the costs-in-loss ablation, and the one-shot 2024–25 holdout~~ ✅
 4. **Delivery:** Streamlit dashboard and research report.
 
 ## Limitations
