@@ -120,10 +120,9 @@ def overview():
         st.markdown("\n".join(
             f"- **vs {dd.NAMES[b]}:** {r['diff']:+.2f} ({r['ci_low']:+.2f} to {r['ci_high']:+.2f})"
             for b, r in comp.iterrows()))
-        st.markdown("**The objective matters more than the architecture.** A linear model trained on the same "
-                    "after-cost Sharpe loss can't be told apart from the Transformer. Gradient boosting and ridge, "
-                    "which forecast first and trade second, find as much raw signal or more, then lose it by "
-                    "rebuilding the book every day.")
+        st.markdown("**Training on after-cost Sharpe beats forecast-then-trade.** Gradient boosting and ridge "
+                    "find as much raw signal as the networks or more, then lose it by rebuilding the book every "
+                    "day. The Transformer's edge over them comes from its objective, not just its architecture.")
 
     st.markdown("#### What held up")
     st.markdown(
@@ -292,8 +291,9 @@ def integrity():
         st.markdown("#### Amendment: does the neural part matter?")
         st.markdown(f"Committed in [`docs/phase3_amendment_baselines.md`]({REPO}/blob/main/docs/"
                     "phase3_amendment_baselines.md) before the baselines saw the test years. Rule 4: the "
-                    "Transformer beats gradient boosting. Rule 5: it beats a linear model trained with the "
-                    "same Sharpe-after-costs loss. Each needs the paired 95% interval above zero.")
+                    "Transformer beats gradient boosting, which needs the paired 95% interval above zero. Ridge "
+                    "is reported alongside. (A linear control in the original amendment was later removed; see "
+                    "the amendment's deviation note.)")
         st.dataframe(comp.rename(index=dd.NAMES).rename(columns={
             "diff": "Transformer minus baseline", "ci_low": "95% CI low", "ci_high": "95% CI high"})
             .style.format("{:+.2f}"))

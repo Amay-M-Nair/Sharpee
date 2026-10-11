@@ -15,15 +15,15 @@ PHASE3 = ROOT / "reports" / "phase3"
 FIGURES = ROOT / "reports" / "figures"
 PERIODS_PER_YEAR = 252
 
-NAMES = {"ou": "OU", "ridge": "Ridge", "gbm": "Gradient boosting", "linear": "Linear (Sharpe-trained)",
+NAMES = {"ou": "OU", "ridge": "Ridge", "gbm": "Gradient boosting",
          "mlp": "MLP", "temporal_cnn": "Temporal CNN", "transformer": "Transformer",
          "transformer_nocost": "Transformer, no costs in loss"}
 # High contrast on the dark theme; blue and orange stay distinct for colour-blind viewers
-COLORS = {"ou": "#C9D1D9", "ridge": "#BC8CFF", "gbm": "#FF7B72", "linear": "#F778BA", "mlp": "#58A6FF",
+COLORS = {"ou": "#C9D1D9", "ridge": "#BC8CFF", "gbm": "#FF7B72", "mlp": "#58A6FF",
           "temporal_cnn": "#F0883E", "transformer": "#3DDC97", "transformer_nocost": "#F2CC60"}
-BASELINES = {"ridge", "gbm", "linear"}   # non-neural or linear controls, drawn dotted
+BASELINES = {"ridge", "gbm"}   # non-neural baselines, drawn dotted
 REFERENCE = "#6E7681"  # zero lines, thresholds
-MAIN = ["ou", "ridge", "gbm", "linear", "mlp", "temporal_cnn", "transformer"]
+MAIN = ["ou", "ridge", "gbm", "mlp", "temporal_cnn", "transformer"]
 DEFAULT = ["ou", "gbm", "mlp", "transformer"]   # what busy charts show unless the viewer picks more
 PERIODS = {"test": "Test years 2020-2023", "holdout": "Holdout 2024-2025"}
 
@@ -128,7 +128,7 @@ def learned_rule(signals: pd.DataFrame, step: float = 0.5, limit: float = 3.0) -
     edges = np.arange(-limit, limit + step / 2, step)
     mids = (edges[:-1] + edges[1:]) / 2
     buckets = pd.cut(signals["s_score"], edges, labels=mids)
-    models = [m for m in ("ridge", "gbm", "linear", "mlp", "temporal_cnn", "transformer") if m in signals]
+    models = [m for m in ("ridge", "gbm", "mlp", "temporal_cnn", "transformer") if m in signals]
     out = signals.groupby(buckets, observed=True)[models].mean()
     out.index = out.index.astype(float)
     return out
