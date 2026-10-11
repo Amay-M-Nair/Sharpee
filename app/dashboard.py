@@ -50,12 +50,16 @@ def style(df: pd.DataFrame):
 
 
 def finish(fig: go.Figure, title: str, height: int = 360, yaxis: str = "", percent: bool = False,
-           legend_below: bool = False):
-    """Shared dark styling. The legend sits under the title, or below the chart when subplot titles need the top."""
+           legend_below: bool = False, legend_rows: int = 1):
+    """Shared dark styling. The legend sits under the title, or below the chart when subplot titles need the top.
+
+    legend_rows reserves room above the plot for a legend that wraps (many series in a half-width column).
+    """
     legend = (dict(orientation="h", yanchor="top", y=-0.06, xanchor="left", x=0) if legend_below
               else dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
-    fig.update_layout(title=title, yaxis_title=yaxis, height=height, hovermode="x unified",
-                      margin=dict(l=10, r=10, t=60 if legend_below else 80, b=10), legend=legend,
+    top = 60 if legend_below else 80 + 22 * (legend_rows - 1)
+    fig.update_layout(title=title, yaxis_title=yaxis, height=height + top - 80, hovermode="x unified",
+                      margin=dict(l=10, r=10, t=top, b=10), legend=legend,
                       plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     fig.update_xaxes(gridcolor="#21262D", zerolinecolor="#21262D")
     fig.update_yaxes(gridcolor="#21262D", zerolinecolor="#21262D")
@@ -116,11 +120,17 @@ def overview():
         st.markdown("\n".join(
             f"- **vs {dd.NAMES[b]}:** {r['diff']:+.2f} ({r['ci_low']:+.2f} to {r['ci_high']:+.2f})"
             for b, r in comp.iterrows()))
+        st.markdown("**The objective matters more than the architecture.** A linear model trained on the same "
+                    "after-cost Sharpe loss can't be told apart from the Transformer. Gradient boosting and ridge, "
+                    "which forecast first and trade second, find as much raw signal or more, then lose it by "
+                    "rebuilding the book every day.")
 
     st.markdown("#### What held up")
     st.markdown(
         "- **Costs inside the training loss work.** The same Transformer trained without costs did worse in all "
         "3 seeds on 2020–2023 (+0.17 vs −0.08 net) and traded about 50% more.\n"
+        "- **Training on after-cost Sharpe beats forecasting.** Gradient boosting trades about 100% of the book "
+        "per day and loses −1.77 net on 2020–2023, despite a gross Sharpe of 0.84.\n"
         "- **The learned models are more robust.** OU has the strongest raw signal but needs cheap, immediate "
         "execution: move the cost slider, or turn on the one-day delay in *Strategies*.\n"
         "- **When the signal broke down in 2024–2025**, every strategy lost money, but the learned models lost "
@@ -219,7 +229,8 @@ def signal():
         fig.add_hline(y=0, line_width=1, line_color=dd.REFERENCE)
         fig.update_xaxes(title="OU s-score bucket")
         fig.update_layout(hovermode="closest")
-        finish(fig, "Learned rule: mean model score by stretch", 360, "standardized score")
+        finish(fig, "Learned rule: mean model score by stretch", 360, "standardized score",
+               legend_rows=-(-len(rule.columns) // 2))
         st.caption("Below about |s| = 2 the learned models bet on reversion (positive when the residual fell). "
                    "Beyond it they follow the move, which OU never does. Dotted lines are the non-neural "
                    "baselines. All stock-days, seeds averaged.")
