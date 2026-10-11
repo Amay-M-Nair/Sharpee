@@ -2,15 +2,15 @@
 
 A research framework that compares a classical mean-reversion strategy with neural trading models on US equities. The neural models are trained to maximize the **portfolio's Sharpe ratio after transaction costs**, not to forecast prices. Everything is evaluated walk-forward, with no look-ahead.
 
-> **Status: research complete (Phases 1-3), dashboard and report built (Phase 4a).** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, a pre-registered test on the sealed 2020–2023 years, a one-shot 2024–25 holdout, an interactive dashboard and a [research report](reports/research_report.md). Live paper trading with GitHub Actions and MLflow tracking come next (Phase 4b).
+> **Status: research complete (Phases 1-3), dashboard and report built (Phase 4a).** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, a pre-registered test on the sealed 2020–2023 years, a one-shot 2024–25 holdout, ridge and gradient-boosting baselines, an interactive dashboard and a [research report](reports/research_report.md). Live paper trading with GitHub Actions and MLflow tracking come next (Phase 4b).
 
-**Built with:** Python, PyTorch, NumPy, pandas, SciPy, Streamlit, Plotly, pytest, Jupyter.
+**Built with:** Python, PyTorch, scikit-learn, NumPy, pandas, SciPy, Streamlit, Plotly, pytest, Jupyter.
 
 **Read more:** [research report](reports/research_report.md) · [findings, figure by figure](reports/README.md) · [interactive dashboard](#interactive-dashboard)
 
 ## At a glance
 
-| | Result so far |
+| | Result |
 |---|---|
 | **Universe** | The 150 most liquid point-in-time S&P 500 stocks each day, 2010–2025 |
 | **Classic baseline (OU)**, test years 2020–2023 | Sharpe 0.94 before costs, 0.15 after 5 bps costs |
@@ -20,7 +20,7 @@ A research framework that compares a classical mean-reversion strategy with neur
 | **What held up** | Training on costs beat the same model without them in every seed; the learned models degrade about half as fast as OU with higher costs or a one-day delay |
 | **Versus non-neural ML** | Gradient boosting and ridge, which forecast then trade, find as much raw signal but lose it to turnover; the Transformer beats gradient boosting on both periods |
 | **Market exposure** | Beta ≈ 0 for every strategy |
-| **Correctness** | 53 tests, a look-ahead test and a synthetic sanity check; 3 bugs caught and fixed |
+| **Correctness** | 71 tests, a look-ahead test and a synthetic sanity check; 3 bugs caught and fixed |
 
 ## How it works
 
@@ -142,9 +142,9 @@ Run once, after all of the above was committed, with the same frozen settings:
 
 Every original strategy lost, even before costs: residual mean reversion broke down in 2024, when the first factor's share of variance hit multi-year lows and stocks kept trending on their own stories. The learned models lost far less than OU, helped by trading less and by following extreme moves instead of fading them. The verdict is again **no reliable edge after costs**.
 
-### Amendment: does the neural part matter?
+### Amendment: non-neural baselines
 
-Matching OU doesn't show whether the *neural* part matters. Two baselines were added afterwards, with their own rules committed in [`docs/phase3_amendment_baselines.md`](docs/phase3_amendment_baselines.md) before they saw the test years. They use the same inputs, portfolio layer, costs and folds:
+Matching OU doesn't show how the networks compare with standard machine learning on the same inputs. Two baselines were added afterwards, with their own rules committed in [`docs/phase3_amendment_baselines.md`](docs/phase3_amendment_baselines.md) before they saw the test years. They use the same inputs, portfolio layer, costs and folds:
 
 | Net of 5 bps | Training | Gross Sharpe 2020–23 | Net 2020–23 | Net 2024–25 | Turnover per day |
 |---|---|---|---|---|---|
@@ -238,7 +238,7 @@ reports/          research report, findings write-up, figures, Phase 3 results a
 
 1. ~~**Data and baseline:** universe, residuals, OU, backtester, tests~~ ✅
 2. ~~**Neural models:** MLP, temporal CNN and a compact Transformer, trained end-to-end on Sharpe after costs and tuned on Fold 1 only, with every configuration logged~~ ✅
-3. ~~**Evaluation:** a pre-registered protocol, yearly walk-forward retraining on 2020–2023, significance tests, cost and delay sensitivity, the costs-in-loss ablation, and the one-shot 2024–25 holdout~~ ✅
+3. ~~**Evaluation:** a pre-registered protocol, yearly walk-forward retraining on 2020–2023, significance tests, cost and delay sensitivity, the costs-in-loss ablation, and the one-shot 2024–25 holdout~~ ✅ Plus a pre-registered amendment adding ridge and gradient-boosting baselines ✅
 4. **Delivery:**
    - ~~**4a:** interactive Streamlit dashboard and research report~~ ✅
    - **4b:** live paper-trading tracker (a daily GitHub Actions job runs the frozen models after the close and records an out-of-sample track record) and MLflow experiment tracking.
