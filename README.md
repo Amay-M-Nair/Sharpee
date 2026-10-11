@@ -18,6 +18,7 @@ A research framework that compares a classical mean-reversion strategy with neur
 | **Pre-registered test, 2020–2023** | No reliable edge after costs: Transformer +0.17 vs. OU +0.15 net Sharpe, not statistically distinguishable |
 | **One-shot holdout, 2024–2025** | Every strategy lost as residual reversion broke down; the learned models lost far less (Transformer −0.55 vs. OU −1.65) |
 | **What held up** | Training on costs beat the same model without them in every seed; the learned models degrade about half as fast as OU with higher costs or a one-day delay |
+| **Does the neural part matter?** | No: a linear model trained on the same after-cost Sharpe loss matches the Transformer, while gradient boosting and ridge, which forecast then trade, lose it all to turnover. The objective matters, not the architecture |
 | **Market exposure** | Beta ≈ 0 for every strategy |
 | **Correctness** | 53 tests, a look-ahead test and a synthetic sanity check; 3 bugs caught and fixed |
 
@@ -139,9 +140,24 @@ Run once, after all of the above was committed, with the same frozen settings:
 |---|---|---|---|---|
 | 2024–2025 | −1.65 | −0.48 | −0.78 | **−0.55** |
 
-Every strategy lost, even before costs: residual mean reversion broke down in 2024, when the first factor's share of variance hit multi-year lows and stocks kept trending on their own stories. The learned models lost far less than OU, helped by trading less and by following extreme moves instead of fading them. The verdict is again **no reliable edge after costs**.
+Every original strategy lost, even before costs: residual mean reversion broke down in 2024, when the first factor's share of variance hit multi-year lows and stocks kept trending on their own stories. The learned models lost far less than OU, helped by trading less and by following extreme moves instead of fading them. The verdict is again **no reliable edge after costs**.
 
-Full details: [findings write-up](reports/README.md#phase-3-the-sealed-test-years-2020-2023) and [notebook 04](notebooks/04_results.ipynb).
+### Amendment: does the neural part matter?
+
+Matching OU doesn't show whether the *neural* part matters. Three baselines were added afterwards, with their own rules committed in [`docs/phase3_amendment_baselines.md`](docs/phase3_amendment_baselines.md) before they saw the test years. They use the same inputs, portfolio layer, costs and folds:
+
+| Net of 5 bps | Training | Gross Sharpe 2020–23 | Net 2020–23 | Net 2024–25 | Turnover per day |
+|---|---|---|---|---|---|
+| Ridge | Forecast next-day payoff, then trade | 0.70 | −0.32 | −0.81 | 52.6% |
+| Gradient boosting | Forecast next-day payoff, then trade | 0.84 | −1.77 | −2.17 | 100.5% |
+| Linear | Same Sharpe-after-costs loss as the networks | 0.35 | +0.00 | −1.04 | 18.3% |
+| **Transformer** | Sharpe after costs | 0.51 | **+0.17** | **−0.55** | **15.6%** |
+
+- **Beats gradient boosting (rule 4): yes**, +1.94 on 2020–23 (95% CI +0.82 to +3.78) and +1.62 on the holdout. But gradient boosting finds *more* raw signal; it loses by rebuilding the whole book every day. This is a win for cost-aware training over forecast-then-trade.
+- **Beats a linear model trained on the same loss (rule 5): no**, +0.17 (95% CI −0.22 to +0.70). With the objective held fixed, depth and nonlinearity add nothing measurable.
+- **Conclusion: the objective matters, not the architecture.** Even ridge and gradient boosting learned the same "revert small, follow big" rule, so the rule is in the data.
+
+Full details: [findings write-up](reports/README.md#21-amendment-does-the-neural-part-matter-the-objective-does-the-architecture-doesnt), [Phase 3 sections](reports/README.md#phase-3-the-sealed-test-years-2020-2023) and [notebook 04](notebooks/04_results.ipynb).
 
 ## Interactive dashboard
 
@@ -166,7 +182,7 @@ To host it for free, deploy the repository on [Streamlit Community Cloud](https:
 
 - **Look-ahead test:** scramble every price after a cutoff date, rebuild the whole pipeline, and assert that every residual, signal, weight and model score on or before the cutoff is unchanged.
 - **Synthetic sanity check:** with planted mean reversion, OU and all three networks must win (net Sharpe +19 to +22). With pure random-walk residuals, none may earn anything (net Sharpe at or below zero). Networks are scored on a held-out segment, so a lucky validation period can't pass.
-- **66 unit tests:** hand-worked P&L, cost and timing examples; the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`; eligibility rules; portfolio constraints, including that the capped book stays factor-neutral; the loss and its gradients; metrics; PSR, DSR and bootstrap intervals against hand-computed values; and the dashboard's numbers against the official Phase 3 results.
+- **73 unit tests:** hand-worked P&L, cost and timing examples; the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`; eligibility rules; portfolio constraints, including that the capped book stays factor-neutral; the loss and its gradients; metrics; PSR, DSR and bootstrap intervals against hand-computed values; and the dashboard's numbers against the official Phase 3 results.
 
 ### What the checks caught
 
@@ -188,7 +204,8 @@ python scripts/run_baseline.py       # OU baseline -> reports/
 python scripts/sanity_synthetic.py   # pipeline check on synthetic markets
 python scripts/run_baseline.py --tune                     # OU threshold on Fold 1 validation
 python scripts/train_model.py --model transformer --tune  # same for mlp and temporal_cnn; --resume skips logged configs
-python scripts/walk_forward.py --model transformer        # yearly retraining on 2020-2023 (also mlp, temporal_cnn; --no-cost for the ablation)
+python scripts/walk_forward.py --model transformer        # yearly retraining on 2020-2023 (also linear, mlp, temporal_cnn; --no-cost for the ablation)
+python scripts/train_tabular.py --model gbm --tune --walk-forward   # ridge and gradient-boosting baselines
 python scripts/run_backtest.py                           # test-year results, significance tests and the verdict
 python scripts/export_dashboard.py                       # small result files for the dashboard
 streamlit run app/dashboard.py
@@ -202,19 +219,19 @@ The notebooks run top to bottom with the project's environment, e.g. `python -m 
 ```
 app/              Streamlit dashboard and its data layer
 configs/          data, experiment, OU baseline and model settings (YAML)
-docs/             full project plan (v2) and the pre-registered Phase 3 protocol
+docs/             full project plan (v2), the pre-registered Phase 3 protocol and its baseline amendment
 src/sharpee/
   data/           universe, download, cleaning + eligibility, synthetic markets
   features/       returns, rolling PCA residuals, diagnostics
   strategies/     OU / s-score baseline
   portfolio/      shared weight construction and exposure diagnostics
   backtest/       accounting and costs, backtest engine
-  models/         MLP, temporal CNN, Transformer (+ vendored encoder blocks)
-  training/       day-block dataset, Sharpe-after-costs loss, training loop, trial log, tuning
+  models/         linear control, MLP, temporal CNN, Transformer (+ vendored encoder blocks)
+  training/       day-block dataset, Sharpe-after-costs loss, training loop, trial log, tuning, ridge and gradient boosting
   evaluation/     metrics, walk-forward folds, significance tests (PSR, DSR, bootstrap), strategy books
 notebooks/        01 data exploration, 02 residual analysis, 03 model training, 04 results (outputs saved, readable on GitHub)
-scripts/          download_data, run_baseline, train_model, walk_forward, run_backtest, export_dashboard, sanity_synthetic
-tests/            66 tests, including the look-ahead test
+scripts/          download_data, run_baseline, train_model, train_tabular, walk_forward, run_backtest, export_dashboard, sanity_synthetic
+tests/            73 tests, including the look-ahead test
 reports/          research report, findings write-up, figures, Phase 3 results and dashboard data
 ```
 
