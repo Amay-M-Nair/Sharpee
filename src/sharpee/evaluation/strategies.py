@@ -7,28 +7,30 @@ import pandas as pd
 
 from ..strategies.ou_strategy import ou_positions
 
-STRATEGIES = ["ou", "mlp", "temporal_cnn", "transformer", "transformer_nocost"]
+STRATEGIES = ["ou", "ridge", "gbm", "linear", "mlp", "temporal_cnn", "transformer", "transformer_nocost"]
+DETERMINISTIC = {"ridge", "gbm"}   # fitted once per fold, saved as seed 0
+AMENDMENT = {"ridge", "gbm", "linear"}   # added by docs/phase3_amendment_baselines.md
 COLUMNS = ["gross", "cost", "net", "turnover", "market", "net_exposure", "gross_exposure"]
 
 
 def strategy_scores(panel, runs, period: str, idx: np.ndarray) -> dict:
-    """{strategy: [(seed, scores aligned to idx)]}; models whose walk-forward runs are missing are skipped."""
+    """{strategy: [(seed, scores aligned to idx)]}; models whose walk-forward runs are incomplete are skipped."""
     out = {}
     params = json.loads((runs / "best_ou.json").read_text())["params"]
     out["ou"] = [(0, ou_positions(panel, np.arange(len(panel.dates)), **params)[idx])]
     for name in STRATEGIES[1:]:
         seeds = []
-        for seed in (0, 1, 2):
+        for seed in (0,) if name in DETERMINISTIC else (0, 1, 2):
             f = runs / "walkforward" / period / f"{name}_seed{seed}.npz"
             if f.exists():
                 z = np.load(f)
                 if not np.array_equal(z["idx"], idx):
                     raise ValueError(f"{f.name} does not cover the {period} period exactly")
                 seeds.append((seed, z["scores"]))
-        if len(seeds) == 3:
+        if len(seeds) == (1 if name in DETERMINISTIC else 3):
             out[name] = seeds
         elif seeds:
-            print(f"skipping {name}: {len(seeds)} of 3 seeds finished")
+            print(f"skipping {name}: {len(seeds)} seeds finished")
     return out
 
 

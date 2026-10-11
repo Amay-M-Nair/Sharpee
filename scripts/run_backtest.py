@@ -18,7 +18,7 @@ from sharpee.config import load_config, repo_path
 from sharpee.evaluation.metrics import summarize
 from sharpee.evaluation.significance import (daily_sharpe, dsr, paired_sharpe_difference, psr,
                                              stationary_bootstrap_ci)
-from sharpee.evaluation.strategies import combined, strategy_scores
+from sharpee.evaluation.strategies import AMENDMENT, combined, strategy_scores
 from sharpee.pipeline import load_panel, runs_dir
 from sharpee.training.trials import load_trials
 
@@ -42,9 +42,13 @@ def main():
     print(f"{period} {panel.dates[idx[0]].date()}..{panel.dates[idx[-1]].date()} ({len(idx)} days): "
           f"{', '.join(scores)}")
 
+    # The original models keep the pre-registered N = 15; the amendment baselines count every trial
     trials = load_trials(runs)
     trials = trials[trials["fold"] == "test_2020"]
-    n_trials, var_sr = len(trials), float(trials["val_sr_daily"].var())
+    original = trials[~trials["model"].isin(AMENDMENT)]
+    bars = {"original": (len(original), float(original["val_sr_daily"].var())),
+            "all": (len(trials), float(trials["val_sr_daily"].var()))}
+    n_trials = bars["original"][0]
 
     summary, per_seed, per_year, daily = [], [], [], {}
     for name, seeds in scores.items():
@@ -67,8 +71,9 @@ def main():
     for name, book in daily.items():
         r = book["net"].to_numpy()
         lo, hi = stationary_bootstrap_ci(r)
+        n, v = bars["all"] if name in AMENDMENT else bars["original"]
         row = {"strategy": name, "net_sharpe": daily_sharpe(r) * np.sqrt(252), "ci_low": lo, "ci_high": hi,
-               "psr": psr(r), "dsr": dsr(r, n_trials, var_sr), "n_trials": n_trials}
+               "psr": psr(r), "dsr": dsr(r, n, v), "n_trials": n}
         if name != "ou":
             d, d_lo, d_hi = paired_sharpe_difference(r, base)
             row.update(diff_vs_ou=d, diff_ci_low=d_lo, diff_ci_high=d_hi)
@@ -113,6 +118,31 @@ def main():
             f"**Verdict: {verdict}.**",
         ]
         (out / f"{period}_verdict.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print("\n" + "\n".join(lines))
+
+    # Amendment rules 4 and 5: does the neural part matter? (docs/phase3_amendment_baselines.md)
+    if PRIMARY in daily and AMENDMENT & set(daily):
+        prim = daily[PRIMARY]["net"].to_numpy()
+        rows = []
+        for base_name in [s for s in ("gbm", "linear", "ridge") if s in daily]:
+            d, d_lo, d_hi = paired_sharpe_difference(prim, daily[base_name]["net"].to_numpy())
+            rows.append({"baseline": base_name, "diff": d, "ci_low": d_lo, "ci_high": d_hi})
+        comp = pd.DataFrame(rows).set_index("baseline")
+        comp.to_csv(out / f"{period}_neural_vs_baselines.csv")
+        lines = [f"# Amendment: does the neural part matter? ({period}, {years[0]}-{years[-1]})", "",
+                 f"Sharpe(Transformer) minus Sharpe(baseline), net of {cfg['cost_bps']:g} bps, paired 95% interval.",
+                 ""]
+        for rule, base_name, label in [(4, "gbm", "gradient boosting"),
+                                       (5, "linear", "the Sharpe-trained linear model")]:
+            if base_name in comp.index:
+                c = comp.loc[base_name]
+                lines.append(f"- Rule {rule}, vs {label}: {c['diff']:+.2f} (95% CI {c['ci_low']:+.2f} to "
+                             f"{c['ci_high']:+.2f}): {'yes' if c['ci_low'] > 0 else 'no'}")
+        if "ridge" in comp.index:
+            c = comp.loc["ridge"]
+            lines.append(f"- Reported, vs ridge: {c['diff']:+.2f} (95% CI {c['ci_low']:+.2f} to "
+                         f"{c['ci_high']:+.2f})")
+        (out / f"{period}_amendment.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
         print("\n" + "\n".join(lines))
     print(f"\nwrote reports/phase3/{period}_*")
 
