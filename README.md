@@ -1,6 +1,6 @@
 # Sharpee: cost-aware deep learning for statistical arbitrage
 
-A research framework that compares a classical mean-reversion strategy with neural trading models on US equities. The neural models are trained to maximize the **portfolio's Sharpe ratio after transaction costs**, not to forecast prices. Everything is evaluated walk-forward, with no look-ahead.
+A research framework that compares a classical mean-reversion strategy with neural trading models and non-neural machine-learning baselines on US equities. The neural models are trained to maximize the **portfolio's Sharpe ratio after transaction costs**, not to forecast prices; the ridge and gradient-boosting baselines forecast, as standard machine learning would. Everything is evaluated walk-forward, with no look-ahead.
 
 > **Status: research complete (Phases 1-3), dashboard and report built (Phase 4a).** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, a pre-registered test on the sealed 2020–2023 years, a one-shot 2024–25 holdout, ridge and gradient-boosting baselines, an interactive dashboard and a [research report](reports/research_report.md). Live paper trading with GitHub Actions and MLflow tracking come next (Phase 4b).
 
@@ -28,15 +28,20 @@ A research framework that compares a classical mean-reversion strategy with neur
 flowchart TD
     A["S&P 500 membership + Yahoo prices"] --> B["Daily eligibility: 150 most liquid"]
     B --> C["Rolling PCA: residual returns"]
-    C --> D1["OU s-score rules"]
-    C --> D2["MLP / temporal CNN / Transformer"]
+    C --> D1["OU: fixed s-score rules"]
+    C --> D2["MLP / temporal CNN / Transformer: trained on Sharpe after costs"]
+    C --> D3["Ridge / gradient boosting: forecast next-day payoff"]
     D1 --> E["Portfolio layer: cap each bet, then hedge (x = Φᵀw)"]
     D2 --> E
+    D3 --> E
     E --> F["Backtest: next-day returns minus costs"]
 ```
 
 1. **Remove what the market and sectors did.** Each stock's daily return is split into a part explained by 5 PCA factors and a stock-specific **residual**.
-2. **Bet that residuals snap back.** The OU baseline uses fixed rules. The neural networks learn their own rule from each stock's last 30 days of residual moves.
+2. **Bet that residuals snap back.** Three kinds of strategy read each stock's last 30 days of residual moves:
+   - **OU** (classic baseline): fixed Avellaneda–Lee rules.
+   - **Neural networks** (MLP, temporal CNN, Transformer): learn their own rule, trained directly on the portfolio's Sharpe ratio after costs.
+   - **Non-neural ML** (ridge, gradient boosting): standard forecast-then-trade, predicting each stock's next-day residual payoff and trading the forecasts.
 3. **Hold hedged positions.** Every bet is long the stock and short its factor exposure, so the portfolio stays market-neutral.
 4. **Charge realistic costs.** Weights set at the close earn the next day's return minus 5 bps per unit traded. The networks are trained on exactly this after-cost result.
 
