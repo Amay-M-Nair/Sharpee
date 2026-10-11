@@ -1,0 +1,5 @@
+# Robustness check: 400-stock universe (docs/robustness_universe_400.md).
+# Use with SHARPEE_VARIANT=n400; everything else is inherited unchanged.
+universe_size: 400
+runs_dir: runs/n400
+reports_dir: reports/n400
