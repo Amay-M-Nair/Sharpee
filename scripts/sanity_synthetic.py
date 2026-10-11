@@ -3,11 +3,11 @@
     planted mean reversion (AR(1) cumulative residuals) -> every strategy must earn a clearly positive Sharpe
     random-walk residuals                               -> Sharpe about 0 gross, lower net
 
-Neural models train on the first part of the sample, early-stop on the next
-and are scored on the last part, so a lucky validation period cannot pass the
-check. If a check fails, the bug is in the pipeline, not in the market.
+Learned models train on the first part of the sample (neural ones early-stop
+on the next) and are scored on the last part, so a lucky validation period
+cannot pass the check. If a check fails, the bug is in the pipeline, not in the market.
 
-    python scripts/sanity_synthetic.py            # OU + MLP + temporal CNN + Transformer
+    python scripts/sanity_synthetic.py            # OU, ridge, GBM, linear, MLP, temporal CNN, Transformer
     python scripts/sanity_synthetic.py --ou-only  # seconds instead of minutes
 """
 
@@ -22,13 +22,14 @@ from sharpee.data.synthetic import make_market
 from sharpee.evaluation.metrics import sharpe
 from sharpee.pipeline import panel_from_market
 from sharpee.strategies.ou_strategy import ou_positions
+from sharpee.training import tabular
 from sharpee.training.dataset import DayBlocks
 from sharpee.training.train import predict
 from sharpee.training.tuning import train_config
 
 CFG = {"universe_size": 100, "min_price": 5.0, "history_days": 312, "min_history_frac": 0.98,
        "dollar_volume_window": 20, "n_factors": 5, "pca_window": 252, "max_lookback": 60}
-MODELS = ["mlp", "temporal_cnn", "transformer"]
+MODELS = ["linear", "mlp", "temporal_cnn", "transformer"]
 
 
 def scores_for(name, panel, train, val, test, device):
@@ -42,6 +43,13 @@ def scores_for(name, panel, train, val, test, device):
     return predict(model, data["test"])
 
 
+def tabular_scores(name, panel, train, test):
+    cfg = load_config(name)
+    x, y = tabular.make_xy(panel, train, cfg["lookback"])
+    model = tabular.fit(name, cfg["params"], x, y)
+    return tabular.predict_scores(model, panel, test, cfg["lookback"])
+
+
 def run(ar, with_models, device):
     panel = panel_from_market(make_market(n_stocks=100, n_days=2500, n_factors=5, ar=ar, seed=0), CFG)
     n = len(panel.dates)
@@ -49,6 +57,8 @@ def run(ar, with_models, device):
     ou = ou_positions(panel, np.arange(n))
     out = {"ou": ou[test]}
     if with_models:
+        for name in tabular.TABULAR:
+            out[name] = tabular_scores(name, panel, train, test)
         for name in MODELS:
             out[name] = scores_for(name, panel, train, val, test, device)
     # OU's +1/-1 positions are rule-based and not centered; model scores are
