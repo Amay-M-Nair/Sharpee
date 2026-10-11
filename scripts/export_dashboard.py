@@ -32,7 +32,7 @@ from sharpee.strategies.ou_strategy import ou_fit
 from sharpee.training.dataset import DayBlocks
 from sharpee.training.trials import load_trials
 
-MODELS = ["ridge", "gbm", "linear", "mlp", "temporal_cnn", "transformer"]
+MODELS = ["ridge", "gbm", "mlp", "temporal_cnn", "transformer"]
 
 
 def standardized(scores: np.ndarray, tradable: np.ndarray) -> np.ndarray:

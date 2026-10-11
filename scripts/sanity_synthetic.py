@@ -7,7 +7,7 @@ Learned models train on the first part of the sample (neural ones early-stop
 on the next) and are scored on the last part, so a lucky validation period
 cannot pass the check. If a check fails, the bug is in the pipeline, not in the market.
 
-    python scripts/sanity_synthetic.py            # OU, ridge, GBM, linear, MLP, temporal CNN, Transformer
+    python scripts/sanity_synthetic.py            # OU, ridge, GBM, MLP, temporal CNN, Transformer
     python scripts/sanity_synthetic.py --ou-only  # seconds instead of minutes
 """
 
@@ -29,7 +29,7 @@ from sharpee.training.tuning import train_config
 
 CFG = {"universe_size": 100, "min_price": 5.0, "history_days": 312, "min_history_frac": 0.98,
        "dollar_volume_window": 20, "n_factors": 5, "pca_window": 252, "max_lookback": 60}
-MODELS = ["linear", "mlp", "temporal_cnn", "transformer"]
+MODELS = ["mlp", "temporal_cnn", "transformer"]
 
 
 def scores_for(name, panel, train, val, test, device):

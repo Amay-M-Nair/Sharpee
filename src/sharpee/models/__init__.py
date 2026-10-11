@@ -1,9 +1,8 @@
-from .linear import ResidualLinear
 from .mlp import ResidualMLP
 from .temporal_cnn import ResidualCNN
 from .transformer import ResidualTransformer
 
-MODELS = {"linear": ResidualLinear, "mlp": ResidualMLP, "transformer": ResidualTransformer,
+MODELS = {"mlp": ResidualMLP, "transformer": ResidualTransformer,
           "temporal_cnn": ResidualCNN}
 
 

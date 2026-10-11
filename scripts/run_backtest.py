@@ -124,7 +124,7 @@ def main():
     if PRIMARY in daily and AMENDMENT & set(daily):
         prim = daily[PRIMARY]["net"].to_numpy()
         rows = []
-        for base_name in [s for s in ("gbm", "linear", "ridge") if s in daily]:
+        for base_name in [s for s in ("gbm", "ridge") if s in daily]:
             d, d_lo, d_hi = paired_sharpe_difference(prim, daily[base_name]["net"].to_numpy())
             rows.append({"baseline": base_name, "diff": d, "ci_low": d_lo, "ci_high": d_hi})
         comp = pd.DataFrame(rows).set_index("baseline")
@@ -132,8 +132,7 @@ def main():
         lines = [f"# Amendment: does the neural part matter? ({period}, {years[0]}-{years[-1]})", "",
                  f"Sharpe(Transformer) minus Sharpe(baseline), net of {cfg['cost_bps']:g} bps, paired 95% interval.",
                  ""]
-        for rule, base_name, label in [(4, "gbm", "gradient boosting"),
-                                       (5, "linear", "the Sharpe-trained linear model")]:
+        for rule, base_name, label in [(4, "gbm", "gradient boosting")]:
             if base_name in comp.index:
                 c = comp.loc[base_name]
                 lines.append(f"- Rule {rule}, vs {label}: {c['diff']:+.2f} (95% CI {c['ci_low']:+.2f} to "
