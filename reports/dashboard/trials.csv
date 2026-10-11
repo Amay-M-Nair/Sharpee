@@ -14,3 +14,12 @@ transformer,"d_model 32, lr 0.001",0.2084881263350622,a7b7faa58f
 transformer,"d_model 32, lr 0.0003",0.200952885447554,fd638b5f39
 transformer,"d_model 64, lr 0.001",0.1943035338535429,6f0cdc2df8
 transformer,"d_model 64, lr 0.0003",0.1003773953894236,0ce024f5f7
+ridge,alpha 1,-2.600374981508738,ee87f23574
+ridge,alpha 100,-2.538346970913416,85773688d5
+ridge,alpha 10000,-0.92165774825532,1b96eb4543
+gbm,"learning_rate 0.03, max_leaf_nodes 15",-4.410502117985093,43f2216039
+gbm,"learning_rate 0.1, max_leaf_nodes 15",-5.513858464382889,3d4ff8817c
+gbm,"learning_rate 0.03, max_leaf_nodes 63",-6.687817471598796,c64d3ff29e
+gbm,"learning_rate 0.1, max_leaf_nodes 63",-7.539265170575835,7882ef3416
+linear,lr 0.001,-0.0709850342388203,361bf86a6c
+linear,lr 0.0003,-0.1080060803663088,b642562a54

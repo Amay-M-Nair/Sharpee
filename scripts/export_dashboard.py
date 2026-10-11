@@ -32,7 +32,7 @@ from sharpee.strategies.ou_strategy import ou_fit
 from sharpee.training.dataset import DayBlocks
 from sharpee.training.trials import load_trials
 
-MODELS = ["mlp", "temporal_cnn", "transformer"]
+MODELS = ["ridge", "gbm", "linear", "mlp", "temporal_cnn", "transformer"]
 
 
 def standardized(scores: np.ndarray, tradable: np.ndarray) -> np.ndarray:
@@ -111,8 +111,11 @@ def export_trials(runs, out):
         p = json.loads(row.params)
         if row.model == "ou":
             return f"entry {p['entry']}"
-        size = {k: v for k, v in p["params"].items() if k in ("hidden", "channels", "d_model")}
-        return ", ".join(f"{k} {v}" for k, v in size.items()) + f", lr {p['train']['lr']}"
+        keys = ("hidden", "channels", "d_model", "alpha", "max_leaf_nodes", "learning_rate")
+        parts = [f"{k} {v:g}" for k, v in p["params"].items() if k in keys]
+        if "train" in p:  # networks and the linear model
+            parts.append(f"lr {p['train']['lr']:g}")
+        return ", ".join(parts)
 
     trials["config"] = trials.apply(describe, axis=1)
     trials[["model", "config", "val_sharpe", "trial_id"]].to_csv(out / "trials.csv", index=False)
