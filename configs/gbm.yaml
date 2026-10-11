@@ -1,0 +1,12 @@
+# Gradient boosting (scikit-learn HistGradientBoostingRegressor) on the same target as ridge.
+model: gbm
+lookback: 30
+params:
+  max_iter: 200
+  learning_rate: 0.1
+  max_leaf_nodes: 31
+  min_samples_leaf: 200
+  l2_regularization: 1.0
+tune:                     # Fold 1 only; every combination is logged as a trial
+  params.max_leaf_nodes: [15, 63]
+  params.learning_rate: [0.03, 0.1]

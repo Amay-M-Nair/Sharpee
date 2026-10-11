@@ -1,0 +1,7 @@
+# Ridge regression on the next-day residual payoff, z-scored across stocks each day.
+model: ridge
+lookback: 30
+params:
+  alpha: 100.0
+tune:                     # Fold 1 only; every value is logged as a trial
+  params.alpha: [1.0, 100.0, 10000.0]
