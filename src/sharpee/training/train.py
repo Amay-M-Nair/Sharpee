@@ -13,11 +13,24 @@ from .dataset import DayBlocks
 from .loss import sharpe_loss
 
 
+SCORE_CHUNK = 64 * 150  # sequences scored at once; the original 150-stock blocks fit in one chunk
+
+
+def score_paths(model, flat: torch.Tensor) -> torch.Tensor:
+    """Score (B, L, 1) paths. Large training batches are scored in checkpointed chunks:
+    identical gradients, but activations are recomputed in the backward pass instead of
+    stored, so a 400-stock block fits on a 4 GB GPU."""
+    if len(flat) <= SCORE_CHUNK or not torch.is_grad_enabled():
+        return model(flat)
+    return torch.cat([torch.utils.checkpoint.checkpoint(model, flat[a:a + SCORE_CHUNK], use_reentrant=False)
+                      for a in range(0, len(flat), SCORE_CHUNK)])
+
+
 def portfolio_forward(model, data: DayBlocks, sl: slice, cap, cost: float):
     """Scores -> weights -> net returns for one block, with gradients."""
     X, phi, tradable, universe, r_next = data.batch(sl)
     t, n, length = X.shape
-    scores = model(X.reshape(t * n, length, 1)).view(t, n)
+    scores = score_paths(model, X.reshape(t * n, length, 1)).view(t, n)
     x = build_weights(scores, phi, tradable, cap)
     x_glob = to_global(x, universe, data.n_tickers)
     _, _, net = portfolio_returns(x_glob, r_next, cost)
