@@ -1,6 +1,6 @@
 # Findings: the evidence behind Sharpee's design
 
-Each figure below comes from the notebooks ([01 data exploration](../notebooks/01_data_exploration.ipynb), [02 residual analysis](../notebooks/02_residual_analysis.ipynb), [03 model training](../notebooks/03_train_models.ipynb), [04 results](../notebooks/04_results.ipynb)) or from `scripts/run_baseline.py`, and rerunning them regenerates it. Every section covers what the data shows and which design decision it justifies. Sections 1-10 are Phase 1 (data and baseline), sections 11-14 are Phase 2 (neural models), and sections 15-20 are Phase 3 (the sealed test years and the holdout).
+Each figure below comes from the notebooks ([01 data exploration](../notebooks/01_data_exploration.ipynb), [02 residual analysis](../notebooks/02_residual_analysis.ipynb), [03 model training](../notebooks/03_train_models.ipynb), [04 results](../notebooks/04_results.ipynb)) or from `scripts/run_baseline.py`, and rerunning them regenerates it. Every section covers what the data shows and which design decision it justifies. Sections 1-10 are Phase 1 (data and baseline), sections 11-14 are Phase 2 (neural models), sections 15-20 are Phase 3 (the sealed test years and the holdout), and section 21 is the amendment that adds non-neural baselines.
 
 ---
 
@@ -268,3 +268,38 @@ The rules were fixed in [`docs/phase3_protocol.md`](../docs/phase3_protocol.md) 
 **What held up anyway.** The learned models lost far less than OU (Transformer −0.55 vs −1.65; paired difference +1.10, 95% CI −0.16 to +2.46, just short of excluding zero), helped by trading less and by following extreme moves instead of fading them. In 2025 the MLP and Transformer were slightly positive again (+0.38 and +0.18), while OU stayed negative (−0.83).
 
 **Bottom line of Phase 3.** The learned models reproduce the classic signal, add a nonlinear twist that holds out of sample, and are far cheaper to run, which made them much more resilient when the signal broke down. But neither the four test years nor the holdout show that any of them reliably earns money after costs.
+
+---
+
+## 21. Amendment: does the neural part matter? The objective does, the architecture doesn't
+
+![Baselines comparison](figures/04_baselines_comparison.png)
+
+![Transformer vs baselines](figures/04_neural_vs_baselines.png)
+
+**Why it was added.** Matching OU after costs doesn't show whether the *neural* part matters, or whether any learned model on the same inputs would do the same. Three baselines were added after the Phase 3 results, with their own rules committed in [`docs/phase3_amendment_baselines.md`](../docs/phase3_amendment_baselines.md) before they saw the test years. They use the same inputs, portfolio layer, costs, folds and Fold 1-only tuning, and their 9 configurations are in the trial log, so their Deflated Sharpe counts all 24.
+
+| Net of 5 bps | Training | Gross Sharpe 2020–23 | Net Sharpe 2020–23 | Net Sharpe 2024–25 | Turnover per day |
+|---|---|---|---|---|---|
+| Ridge | Forecast next-day payoff, then trade | 0.70 | −0.32 | −0.81 | 52.6% |
+| Gradient boosting | Forecast next-day payoff, then trade | 0.84 | −1.77 | −2.17 | 100.5% |
+| Linear | Same Sharpe-after-costs loss as the networks | 0.35 | +0.00 | −1.04 | 18.3% |
+| MLP | Sharpe after costs | 0.55 | +0.16 | −0.48 | 19.0% |
+| Transformer | Sharpe after costs | 0.51 | +0.17 | −0.55 | 15.6% |
+
+| Amendment rule (Transformer minus baseline, paired 95% CI) | 2020–2023 | 2024–2025 | Answer |
+|---|---|---|---|
+| 4. Beats gradient boosting | +1.94 (+0.82 to +3.78) | +1.62 (+0.26 to +2.84) | yes |
+| 5. Beats the Sharpe-trained linear model | +0.17 (−0.22 to +0.70) | +0.49 (−0.17 to +1.21) | no |
+| Reported: vs ridge | +0.50 (−0.32 to +1.56) | +0.26 (−0.89 to +1.43) | — |
+
+**What it shows.**
+- **The win over gradient boosting is a win for the objective.** Gradient boosting finds *more* raw signal than the Transformer (gross Sharpe 0.84 vs 0.51), but because it forecasts first and trades second, it rebuilds the whole book every day and costs wipe it out. Ridge, at about half that turnover, loses less.
+- **Holding the objective fixed, depth and nonlinearity add nothing measurable.** A single linear layer trained on after-cost Sharpe can't be told apart from the Transformer.
+- **The learned rule is in the data, not the architecture.** Ridge and gradient boosting, trained only to forecast, also revert moderate stretches and follow extreme ones:
+
+![Baselines learned rule](figures/04_baselines_learned_rule.png)
+
+- **A holdout caveat.** In 2024–2025 the forecasting models kept a positive gross signal (gradient boosting +1.43, ridge +0.88) while every reversion-style model went negative even before costs. Forecasting the next-day payoff lets a model pick up whatever predicts it, including the continuation 2024 rewarded; at 65–100% daily turnover it was untradeable.
+
+**Design decision this supports.** The project's central choice, training on the portfolio's Sharpe ratio *after costs*, is what matters. The model class inside that objective is secondary on these inputs.
