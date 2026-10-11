@@ -35,7 +35,7 @@ def test_verdict_line():
 
 def test_learned_rule_reverts_moderate_moves():
     rule = dd.learned_rule(dd.load_signals("test"))
-    assert list(rule.columns) == ["mlp", "temporal_cnn", "transformer"]
+    assert {"mlp", "temporal_cnn", "transformer"} <= set(rule.columns)
     # long when the residual fell (s < 0), short when it rose: a downward slope across the middle
     assert (rule.loc[-1.25] > 0).all() and (rule.loc[1.25] < 0).all()
 

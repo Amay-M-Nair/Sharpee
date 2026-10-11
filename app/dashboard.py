@@ -70,7 +70,7 @@ def lines(series: dict, title: str, yaxis: str = "", hline=None, percent=False, 
         fig.add_trace(go.Scatter(
             x=s.index, y=s.values, name=dd.NAMES[key], mode="lines",
             line=dict(color=dd.COLORS[key], width=2.6 if key in ("ou", "transformer") else 1.8,
-                      dash="dash" if key == "transformer_nocost" else None)))
+                      dash="dash" if key == "transformer_nocost" else "dot" if key in dd.BASELINES else None)))
     if hline is not None:
         fig.add_hline(y=hline, line_width=1, line_color=dd.REFERENCE)
     finish(fig, title, height, yaxis, percent)
@@ -106,6 +106,17 @@ def overview():
     st.caption(f"{dd.PERIODS[period]}, net of {cost} bps, neural models' 3 seeds combined. "
                "Confidence intervals are stationary-bootstrap intervals at 5 bps.")
 
+    comp = dd.load_neural_vs_baselines(period)
+    if comp is not None:
+        st.markdown("#### Does the neural part matter?")
+        st.markdown(
+            "Added after the main study, with its own rules committed before running: non-neural baselines on "
+            "the same inputs, portfolio layer and costs. Transformer minus each baseline, net Sharpe at 5 bps, "
+            "paired 95% interval:")
+        st.markdown("\n".join(
+            f"- **vs {dd.NAMES[b]}:** {r['diff']:+.2f} ({r['ci_low']:+.2f} to {r['ci_high']:+.2f})"
+            for b, r in comp.iterrows()))
+
     st.markdown("#### What held up")
     st.markdown(
         "- **Costs inside the training loss work.** The same Transformer trained without costs did worse in all "
@@ -120,7 +131,8 @@ def overview():
 
 def explorer():
     left, right = st.columns([3, 1], vertical_alignment="bottom")
-    picks = left.multiselect("Strategies", available, default=main, format_func=dd.NAMES.get)
+    picks = left.multiselect("Strategies", available, default=[s for s in dd.DEFAULT if s in available],
+                             format_func=dd.NAMES.get)
     delay = 1 if right.toggle("Trade one day late") else 0
     if not picks:
         st.info("Pick at least one strategy.")
@@ -134,7 +146,8 @@ def explorer():
     with left:
         curve = dd.sharpe_vs_cost(returns, picks, range(0, 31), delay)
         fig = go.Figure([go.Scatter(x=curve.index, y=curve[dd.NAMES[s]], name=dd.NAMES[s], mode="lines",
-                                    line=dict(color=dd.COLORS[s], width=2.4)) for s in picks])
+                                    line=dict(color=dd.COLORS[s], width=2.4,
+                                              dash="dot" if s in dd.BASELINES else None)) for s in picks])
         fig.add_vline(x=cost, line_dash="dot", line_color=dd.REFERENCE)
         fig.add_hline(y=0, line_width=1, line_color=dd.REFERENCE)
         fig.update_xaxes(title="bps per unit traded")
@@ -153,14 +166,15 @@ def risk():
     st.markdown("Every book is meant to be close to market-neutral: each bet is long a stock and short its "
                 "factor exposure. These charts are the ongoing check.")
     market = returns["market.return"]
-    lines({s: dd.rolling_beta(dd.net_returns(returns, s, cost), market) for s in main},
+    shown = [s for s in dd.DEFAULT if s in available]
+    lines({s: dd.rolling_beta(dd.net_returns(returns, s, cost), market) for s in shown},
           "Rolling 63-day beta to SPY", "beta", hline=0)
     left, right = st.columns(2)
     with left:
-        lines({s: returns[f"{s}.net_exposure"] for s in main}, "Net dollar exposure (share of the book)",
+        lines({s: returns[f"{s}.net_exposure"] for s in shown}, "Net dollar exposure (share of the book)",
               hline=0, height=320)
     with right:
-        lines({s: returns[f"{s}.turnover_d0"].rolling(21).mean() for s in main},
+        lines({s: returns[f"{s}.turnover_d0"].rolling(21).mean() for s in shown},
               "Turnover, 21-day average", percent=True, height=320)
     st.info("Why this matters: during development, a position cap applied after hedging let a model quietly "
             "go long the market, 80–90% correlated with the S&P 500. The cap now acts before hedging, and a "
@@ -199,13 +213,16 @@ def signal():
     with left:
         rule = rule_for(period)
         fig = go.Figure([go.Scatter(x=rule.index, y=rule[s], name=dd.NAMES[s], mode="lines+markers",
-                                    line=dict(color=dd.COLORS[s], width=2.4)) for s in rule.columns])
+                                    line=dict(color=dd.COLORS[s], width=2.4,
+                                              dash="dot" if s in dd.BASELINES else None))
+                         for s in rule.columns])
         fig.add_hline(y=0, line_width=1, line_color=dd.REFERENCE)
         fig.update_xaxes(title="OU s-score bucket")
         fig.update_layout(hovermode="closest")
         finish(fig, "Learned rule: mean model score by stretch", 360, "standardized score")
-        st.caption("Below about |s| = 2 the networks bet on reversion (positive when the residual fell). "
-                   "Beyond it they follow the move, which OU never does. All stock-days, 3 seeds averaged.")
+        st.caption("Below about |s| = 2 the learned models bet on reversion (positive when the residual fell). "
+                   "Beyond it they follow the move, which OU never does. Dotted lines are the non-neural "
+                   "baselines. All stock-days, seeds averaged.")
     with right:
         att = dd.load_attention()
         fig = go.Figure([go.Scatter(x=att.index, y=att[c], name=label, mode="lines+markers",
@@ -235,13 +252,20 @@ def integrity():
     fig.update_yaxes(autorange="reversed")
     fig.update_layout(hovermode="closest")
     finish(fig, "Validation net Sharpe (2018–2019) of all 15 configurations", 460)
-    daily = t["val_sharpe"] / np.sqrt(252)
-    n, z = len(t), NormalDist()
-    luck = daily.std() * ((1 - EULER_GAMMA) * z.inv_cdf(1 - 1 / n)
-                          + EULER_GAMMA * z.inv_cdf(1 - 1 / (n * np.e))) * np.sqrt(252)
-    st.markdown(f"With {n} configurations this spread, the best one would reach an annualized Sharpe of about "
-                f"**{luck:.2f} by luck alone**. The Deflated Sharpe Ratio requires a result to clear that bar, "
-                "which is why it's stricter than the plain probability of a positive Sharpe.")
+    def luck(trial_sharpes):
+        daily, n, z = trial_sharpes / np.sqrt(252), len(trial_sharpes), NormalDist()
+        return daily.std() * ((1 - EULER_GAMMA) * z.inv_cdf(1 - 1 / n)
+                              + EULER_GAMMA * z.inv_cdf(1 - 1 / (n * np.e))) * np.sqrt(252)
+
+    original = t[~t["model"].isin(dd.BASELINES)]
+    st.markdown(f"With the original {len(original)} configurations, the best one would reach an annualized "
+                f"Sharpe of about **{luck(original['val_sharpe']):.2f} by luck alone**. The Deflated Sharpe Ratio "
+                "requires a result to clear that bar, which is why it's stricter than the plain probability of "
+                "a positive Sharpe.")
+    if len(original) < len(t):
+        st.caption(f"The baselines added later bring the log to {len(t)} configurations (luck bar about "
+                   f"{luck(t['val_sharpe']):.2f}); their DSR uses all {len(t)}, while the original models keep "
+                   f"the pre-registered {len(original)}.")
 
     st.markdown("#### Ablation: costs in the training loss")
     pair = [s for s in ["transformer", "transformer_nocost"] if s in available]
@@ -251,6 +275,17 @@ def integrity():
                    "inside the training loss. On 2020–2023 the cost-trained version was better in every seed.")
     else:
         st.caption("The ablation was run on the test years only; switch the period to 2020–2023.")
+
+    comp = dd.load_neural_vs_baselines(period)
+    if comp is not None:
+        st.markdown("#### Amendment: does the neural part matter?")
+        st.markdown(f"Committed in [`docs/phase3_amendment_baselines.md`]({REPO}/blob/main/docs/"
+                    "phase3_amendment_baselines.md) before the baselines saw the test years. Rule 4: the "
+                    "Transformer beats gradient boosting. Rule 5: it beats a linear model trained with the "
+                    "same Sharpe-after-costs loss. Each needs the paired 95% interval above zero.")
+        st.dataframe(comp.rename(index=dd.NAMES).rename(columns={
+            "diff": "Transformer minus baseline", "ci_low": "95% CI low", "ci_high": "95% CI high"})
+            .style.format("{:+.2f}"))
 
     st.markdown("#### What the checks caught")
     with st.expander("NaN training blocks"):
