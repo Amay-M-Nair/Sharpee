@@ -31,3 +31,10 @@ OU, MLP, temporal CNN, Transformer, ridge and gradient boosting, on 2020–2023 
 
 The conclusions "hold" if the verdict wording on 2020–2023 at 5 bps is the same as for 150 stocks. Any
 difference is reported as it comes out, next to the 150-stock results, and does not replace them.
+
+## Presentation (decided before any 400-stock result)
+
+Whatever the 400-stock numbers turn out to be, the dashboard will show the 400-stock run only, since it is
+the wider and more realistic universe. The README and the research report keep the 150-stock results as
+the pre-registered primary findings and show both universes side by side. This is only a choice of what
+the dashboard displays; it does not change which result counts as primary.
