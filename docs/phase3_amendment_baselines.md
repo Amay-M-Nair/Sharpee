@@ -46,3 +46,12 @@ bootstrap interval as the other strategies; **its DSR counts every configuration
 ## Holdout
 
 Each baseline is run once on 2024–2025 with its frozen Fold 1 settings, and reported as it comes out.
+
+## Deviation (recorded after the results)
+
+The linear control and its rule 5 were **removed at the author's request after the amendment results
+had been seen**. Its results (a net Sharpe of +0.00 on 2020–2023 and −1.04 on 2024–2025, with the
+Transformer's advantage over it not distinguishable from zero) remain in the git history and its runs
+are archived, not deleted. Its 2 configurations were taken out of the trial log, so the remaining
+baselines' DSR counts 22 configurations. Without this control, the amendment can no longer separate how
+much of the Transformer's advantage comes from its objective and how much from its architecture.

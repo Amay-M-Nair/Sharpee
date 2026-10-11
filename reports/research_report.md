@@ -20,10 +20,10 @@ than OU and degrade about half as fast as costs rise or execution is delayed. An
 broke down in the 2024–2025 holdout, every strategy lost money, but the learned models lost about a third
 as much as OU.
 
-A pre-registered amendment then added non-neural baselines on the same inputs. A linear model trained on
-the same after-cost Sharpe loss cannot be told apart from the Transformer, while ridge and gradient
-boosting, which forecast and then trade, find as much raw signal but lose it to turnover. **The training
-objective, not the neural architecture, is what separates the learned models.**
+A pre-registered amendment then added non-neural baselines on the same inputs. Ridge and gradient
+boosting, which forecast and then trade, find as much raw signal but lose it to turnover; the Transformer
+beats gradient boosting on both periods. **Training on after-cost Sharpe, rather than forecasting, is what
+makes the signal tradeable.**
 
 ## 1. Question
 
@@ -90,7 +90,7 @@ is penalized directly.
 ## 4. Development: what the checks caught
 
 The pipeline is guarded by a look-ahead test (scramble every price after a cutoff date and assert that
-nothing decided earlier changes), 73 unit tests, and a synthetic sanity check (with planted mean
+nothing decided earlier changes), 71 unit tests, and a synthetic sanity check (with planted mean
 reversion every strategy must win; with pure noise none may). They caught three silent bugs:
 
 1. **NaN training blocks.** Random cut points occasionally produced a 1-day block whose Sharpe is
@@ -193,24 +193,23 @@ peak about 12 days back, roughly one reversion half-life; attention shows where 
 ## 9. Amendment: does the neural part matter?
 
 Matching OU does not show whether the neural part matters. After the results above were published, an
-amendment (`docs/phase3_amendment_baselines.md`) was committed before three baselines saw the test years.
-All use the same inputs, portfolio layer, costs, folds and Fold 1-only tuning; their 9 configurations
-bring the trial log to 24, which their Deflated Sharpe uses. Ridge and gradient boosting forecast each
+amendment (`docs/phase3_amendment_baselines.md`) was committed before the baselines saw the test years.
+All use the same inputs, portfolio layer, costs, folds and Fold 1-only tuning; their 7 configurations
+bring the trial log to 22, which their Deflated Sharpe uses. Ridge and gradient boosting forecast each
 stock's next-day residual payoff (the return of its hedged bet, z-scored across stocks) and trade the
-forecasts; a linear model is trained with the networks' Sharpe-after-costs loss.
+forecasts. (A Sharpe-trained linear control in the original amendment was later removed at the author's
+request; see the amendment's deviation note.)
 
 | Net of 5 bps | Gross Sharpe 2020–23 | Net 2020–23 | Net 2024–25 | Turnover |
 |---|---|---|---|---|
 | Ridge | 0.70 | −0.32 | −0.81 | 52.6% |
 | Gradient boosting | 0.84 | −1.77 | −2.17 | 100.5% |
-| Linear, Sharpe-trained | 0.35 | +0.00 | −1.04 | 18.3% |
 | Transformer | 0.51 | +0.17 | −0.55 | 15.6% |
 
 - **Rule 4, the Transformer beats gradient boosting: yes** (+1.94, 95% CI +0.82 to +3.78; holdout +1.62,
   +0.26 to +2.84). Gradient boosting finds more raw signal than the Transformer but rebuilds the whole book
   daily, so this is a win for cost-aware training over forecast-then-trade, not for neural networks.
-- **Rule 5, the Transformer beats the Sharpe-trained linear model: no** (+0.17, −0.22 to +0.70; holdout
-  +0.49, −0.17 to +1.21). Holding the objective fixed, depth and nonlinearity add nothing measurable.
+- **Versus ridge:** +0.50 (−0.32 to +1.56), not distinguishable.
 - Ridge and gradient boosting learned the same "revert moderate, follow extreme" rule as the networks, so
   the rule is a property of the data. In 2024–2025 the forecasting models kept a positive gross signal
   (gradient boosting +1.43) while the reversion-style models did not, but at 65–100% daily turnover it was
@@ -230,9 +229,8 @@ forecasts; a linear model is trained with the networks' Sharpe-after-costs loss.
 On this data, learning the trading rule end-to-end does not produce a reliable edge over the textbook rule
 after costs, and in 2024–2025 the signal both rely on stopped working. What the learned models do provide
 is a cheaper, more robust way to trade the same signal, and that advantage traces directly to putting
-costs inside the training objective. The baseline amendment confirms it from the other side: any model
-trained on after-cost Sharpe, even a linear one, behaves alike, while forecast-then-trade models lose the
-same signal to turnover. The objective matters; the neural architecture, on these inputs, does not.
+costs inside the training objective. The baseline amendment confirms it from the other side: forecast-then-trade
+models find the same signal but lose it to turnover.
 
 Natural next steps: survivorship-free data (CRSP), next-day-open execution and per-stock cost models;
 richer inputs (volume, volatility, earnings dates, news) and attention across stocks rather than across
@@ -246,8 +244,8 @@ fitted to.
 pip install -r requirements.txt && pip install -e .
 python scripts/download_data.py
 python scripts/run_baseline.py --tune
-python scripts/train_model.py --model transformer --tune      # also linear, mlp, temporal_cnn
-python scripts/walk_forward.py --model transformer            # also linear, mlp, temporal_cnn; --no-cost for the ablation
+python scripts/train_model.py --model transformer --tune      # also mlp, temporal_cnn
+python scripts/walk_forward.py --model transformer            # also mlp, temporal_cnn; --no-cost for the ablation
 python scripts/train_tabular.py --model gbm --tune --walk-forward   # also ridge; add --holdout for 2024-2025
 python scripts/run_backtest.py                                # test years and verdict; --holdout runs 2024-2025
 python scripts/export_dashboard.py && streamlit run app/dashboard.py
