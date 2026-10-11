@@ -87,7 +87,8 @@ def overview():
         "Sharpee removes market and sector moves from S&P 500 stocks with rolling PCA, then bets that what is "
         "left (the residual) snaps back. A classic **Ornstein–Uhlenbeck (OU)** rule is compared with an MLP, a "
         "temporal CNN and a Transformer trained to maximize the **portfolio's Sharpe ratio after trading "
-        "costs**. Every portfolio is factor-hedged, and the rules for judging the result were committed "
+        "costs**, and with ridge and gradient-boosting baselines that forecast and then trade. Every portfolio "
+        "is factor-hedged, and the rules for judging the result were committed "
         "before the test years were opened.")
     sig = significance_for(period)
     st.warning(f"**Pre-registered verdict, {dd.PERIODS[period].lower()}: {dd.verdict_line(period)}.**",
