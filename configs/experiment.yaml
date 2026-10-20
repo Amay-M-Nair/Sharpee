@@ -12,3 +12,12 @@ holdout_years: [2024, 2025]   # run once, after every setting is frozen
 runs_dir: runs
 reports_dir: reports
 seed: 0
+
+# Realistic costs, evaluation only (docs/realistic_costs.md)
+realistic_costs:
+  tiers: [[100, 3.0], [200, 5.0], [300, 7.0]]   # liquidity rank up to N -> bps per unit traded
+  tier_floor_bps: 10.0                          # below the last tier, or no dollar volume
+  scenarios:
+    realistic: {spread_mult: 1.0, borrow_rate: 0.005}
+    stress: {spread_mult: 2.0, borrow_rate: 0.02}
+  primary: realistic
