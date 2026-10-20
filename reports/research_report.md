@@ -90,7 +90,7 @@ is penalized directly.
 ## 4. Development: what the checks caught
 
 The pipeline is guarded by a look-ahead test (scramble every price after a cutoff date and assert that
-nothing decided earlier changes), 74 unit tests, and a synthetic sanity check (with planted mean
+nothing decided earlier changes), 79 unit tests, and a synthetic sanity check (with planted mean
 reversion every strategy must win; with pure noise none may). They caught three silent bugs:
 
 1. **NaN training blocks.** Random cut points occasionally produced a 1-day block whose Sharpe is
@@ -262,6 +262,37 @@ cannot close the gap: even the 400-stock edge over OU would need about 29 years.
 correlated with each other, so they can be compared much more precisely (MDE 0.3–0.5), and the Transformer
 and MLP are still indistinguishable. The gradient-boosting gap is the only effect near the MDE, which is
 why rule 4 is the only rule that passed. The two-year holdout has MDEs of about 1.6–1.9.
+
+## 9d. Realistic costs: spread tiers and borrow fees
+
+Pre-registered in `docs/realistic_costs.md`. Every strategy was rescored from its saved scores, with
+nothing retrained, under two per-stock costs:
+
+- a spread set by the stock's daily liquidity rank among index members (trailing 20-day median dollar
+  volume): 3, 5, 7 and 10 bps per unit traded for ranks 1–100, 101–200, 201–300 and below;
+- a borrow fee of 0.5% a year on short notional, including the hedge legs.
+
+A stress case doubles the tiers and charges 2% a year to borrow.
+
+| Net Sharpe, 2020–2023 | 150: flat 5 bps | 150: realistic | 150: stress | 400: flat 5 bps | 400: realistic | 400: stress |
+|---|---|---|---|---|---|---|
+| OU | +0.15 | +0.31 | −0.43 | −0.04 | −0.32 | −1.57 |
+| Ridge | −0.32 | −0.10 | −0.96 | −0.64 | −1.09 | −3.24 |
+| Gradient boosting | −1.77 | −1.13 | −3.19 | −1.14 | −1.73 | −4.60 |
+| MLP | +0.16 | +0.22 | −0.19 | +0.40 | +0.28 | −0.25 |
+| Temporal CNN | −0.12 | −0.05 | −0.52 | +0.20 | +0.06 | −0.52 |
+| Transformer | +0.17 | +0.22 | −0.14 | +0.39 | +0.28 | −0.21 |
+
+- **The verdict is unchanged** in both universes and both periods.
+- **Liquidity drives the change.** The 150-stock book pays 3.7 bps per unit traded on average, less than
+  the flat 5 bps, so every strategy improves; OU, which trades the most of the non-baseline strategies,
+  moves just ahead of the Transformer (+0.31 vs +0.22, well within noise). The 400-stock book pays 6.3 bps,
+  so every strategy declines, the high-turnover ones most. The networks remain the only strategies with
+  positive net Sharpe there.
+- **Borrow fees are minor.** Every book is about half short, so 0.5% a year costs about 0.2–0.25% of return
+  a year for every strategy.
+- **Stress costs remove every positive result.**
+- **Rule 4 holds in three of four cases.** It fails on the 150-stock holdout (+0.79, 95% CI −0.56 to +2.00).
 
 ## 10. Limitations
 

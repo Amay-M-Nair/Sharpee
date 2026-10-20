@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c)
-![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-79%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 Sharpee asks whether a neural network trained end-to-end on a portfolio's **Sharpe ratio after trading costs** can beat the classic Avellaneda–Lee mean-reversion rule. It removes market and sector moves from S&P 500 stocks with rolling PCA, then trades the leftover residuals with three strategy families:
@@ -25,6 +25,7 @@ Every result is out-of-sample, walk-forward and free of look-ahead. The pass/fai
 - [How it works](#how-it-works)
 - [Evaluation protocol](#evaluation-protocol)
 - [Robustness: a 400-stock universe](#robustness-a-400-stock-universe)
+- [Realistic costs: spread tiers and borrow fees](#realistic-costs-spread-tiers-and-borrow-fees)
 - [How correctness is verified](#how-correctness-is-verified)
 - [Interactive dashboard](#interactive-dashboard)
 - [Getting started](#getting-started)
@@ -56,6 +57,7 @@ Primary universe: the 150 most liquid point-in-time S&P 500 stocks each day. Net
 4. **Optimizing the objective beats forecast-then-trade.** Gradient boosting finds more raw signal than the networks (gross Sharpe 0.84 vs 0.51), then loses it by rebuilding the whole book every day. The Transformer beats it by +1.94 (95% CI +0.82 to +3.78), the one pre-registered comparison that passed.
 5. **The networks learned a rule OU can't express:** revert moderate residual moves, follow extreme ones, which are often news-driven. Ridge and gradient boosting learned it too, so the pattern is in the data.
 6. **The signal broke down in 2024–25.** Every strategy lost after costs, and OU and the networks lost even before them. At 150 stocks the learned models lost far less than OU, but this did not replicate at 400 stocks.
+7. **Realistic costs change the numbers, not the verdict.** With per-stock spreads by liquidity and borrow fees on every short, the 150 most liquid names turn out cheaper than a flat 5 bps and the 400-stock names dearer. No strategy shows a reliable edge in either universe, and with costs doubled nothing stays positive ([details](#realistic-costs-spread-tiers-and-borrow-fees)).
 
 All portfolios are factor-hedged, with market beta of about 0.1 or less.
 
@@ -143,16 +145,53 @@ The same study was rerun on the 400 most liquid stocks each day. They were chose
 - **The verdict holds.** The Transformer has PSR 0.79 and DSR 0.40, and its edge over OU is +0.43 (95% CI −0.31 to +1.31). Rules 1–3 fail; rule 4 passes again, at +1.53 (95% CI +0.77 to +3.08).
 - **The wider universe helps only the low-turnover models.** Gross Sharpe rises for every learned model (Transformer 0.51 → 0.70), while OU's falls (0.94 → 0.82). Only the networks, trading 17–20% of the book a day, keep the gain after costs.
 - **The holdout advantage did not replicate.** In 2024–25 the networks lost about as much as OU.
-- **Costs are optimistic here.** A flat 5 bps understates trading costs for stocks ranked 150–400 by liquidity, so the 10 bps column is the fairer one. Per-stock costs are the [next step](#roadmap).
+- **Flat costs flatter this universe.** A flat 5 bps understates the cost of stocks ranked 150–400 by liquidity. Under [realistic per-stock costs](#realistic-costs-spread-tiers-and-borrow-fees), the 400-stock book pays 6.3 bps per unit traded on average, and the Transformer's net Sharpe falls from +0.39 to +0.28.
 
 Results are in [`reports/n400/phase3/`](reports/n400/phase3/).
+
+## Realistic costs: spread tiers and borrow fees
+
+A flat 5 bps charges the same to trade Apple as a stock a hundred times less liquid, and it ignores that every short position, including the short legs of the factor hedges, has to be borrowed. This check makes both costs per stock. It was [pre-registered](docs/realistic_costs.md) before any result existed and is evaluation only: every strategy is rescored from its saved scores, and nothing is retrained or retuned.
+
+**How the costs are set**
+
+- **Spread by liquidity tier.** Each day, every S&P 500 member is ranked by its trailing 20-day median dollar volume, the same point-in-time quantity the universe filter uses, so there is no look-ahead. The rank sets the cost per unit traded:
+
+  | Liquidity rank among index members | 1–100 | 101–200 | 201–300 | 301 and below |
+  |---|---|---|---|---|
+  | Cost per unit traded | 3 bps | 5 bps | 7 bps | 10 bps |
+
+  A trade costs `Σ cᵢ |Δxᵢ|`, so costs stay linear in what is traded. The tiers are assumptions in line with published effective spreads plus fees for US large and mid caps, not estimates from quote data, which is why a stress case is reported too.
+- **Borrow fees.** Each day, every short position pays `rate / 252 × Σ max(−xᵢ, 0)`: 0.5% a year in the realistic case, typical for easy-to-borrow S&P 500 names.
+- **Stress case:** every spread tier doubled and borrow at 2% a year.
+
+**Results.** Net Sharpe on the 2020–2023 test years, seeds combined:
+
+| Strategy | 150 stocks: flat 5 bps | 150: **realistic** | 150: stress | 400 stocks: flat 5 bps | 400: **realistic** | 400: stress |
+|---|---|---|---|---|---|---|
+| OU | +0.15 | **+0.31** | −0.43 | −0.04 | **−0.32** | −1.57 |
+| Ridge | −0.32 | **−0.10** | −0.96 | −0.64 | **−1.09** | −3.24 |
+| Gradient boosting | −1.77 | **−1.13** | −3.19 | −1.14 | **−1.73** | −4.60 |
+| MLP | +0.16 | **+0.22** | −0.19 | +0.40 | **+0.28** | −0.25 |
+| Temporal CNN | −0.12 | **−0.05** | −0.52 | +0.20 | **+0.06** | −0.52 |
+| **Transformer** | +0.17 | **+0.22** | −0.14 | +0.39 | **+0.28** | −0.21 |
+| *Average spread paid per unit traded* | *5.0 bps* | *3.7 bps* | *7.4 bps* | *5.0 bps* | *6.3 bps* | *12.6 bps* |
+
+- **The verdict holds everywhere: no reliable edge after costs,** in both universes and both periods. The Transformer's PSR is 0.67 at 150 stocks and 0.72 at 400.
+- **Liquidity is what matters.** The 150 most liquid names are cheaper than a flat 5 bps, so every strategy improves there, and OU, which trades more, overtakes the Transformer (+0.31 vs +0.22, a gap well inside the noise). The extra 250 names are dearer, so in the 400-stock run every strategy falls, the high-turnover ones most. That run's apparent advantage for the networks shrinks, though they stay the only strategies above zero.
+- **Borrow fees are small and even-handed.** Every book is about half short, so 0.5% a year costs each strategy about 0.2–0.25% of return a year, far less than spreads. Even the 2% stress rate costs about 1% a year.
+- **With costs doubled, nothing survives.** In the stress case every strategy is negative in both universes.
+- **The learned models still handle execution better.** Under realistic costs and a one-day delay, the Transformer stays near zero (+0.02 at 150, +0.12 at 400) while OU falls to −0.28 and −0.69.
+- **Rule 4 (Transformer beats gradient boosting) holds in three of four cases.** It fails on the 150-stock holdout (+0.79, 95% CI −0.56 to +2.00): cheaper costs on liquid names help the high-turnover baseline most.
+
+The dashboard's **Costs** switch shows the realistic model with an adjustable spread multiplier and borrow rate; every number stays exact because both costs are linear. Results are in [`reports/phase3/realistic/`](reports/phase3/realistic/) and [`reports/n400/phase3/realistic/`](reports/n400/phase3/realistic/).
 
 ## How correctness is verified
 
 - **Look-ahead test:** scramble every price after a cutoff date, rebuild the whole pipeline, and assert that every residual, signal, weight and model score on or before the cutoff is unchanged.
 - **Synthetic sanity check:** with planted mean reversion, OU and all three networks must win (net Sharpe +19 to +22). With random-walk residuals, none may earn anything.
-- **74 unit tests:**
-  - hand-worked P&L, cost and timing examples;
+- **79 unit tests:**
+  - hand-worked P&L, cost, spread-tier, borrow-fee and timing examples;
   - the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`;
   - eligibility rules and factor-neutral capping;
   - the loss and its gradients;
@@ -167,13 +206,13 @@ Results are in [`reports/n400/phase3/`](reports/n400/phase3/).
 
 ## Interactive dashboard
 
-A dark-themed Streamlit app shows the **400-stock run**. A control strip switches between the 2020–2023 test years and the 2024–2025 holdout, and sets the trading cost for every page:
+A dark-themed Streamlit app shows the **400-stock run**. A control strip switches between the 2020–2023 test years and the 2024–2025 holdout, and sets the cost model for every page: a **flat** cost per unit traded, or **realistic** costs with a spread-tier multiplier and a borrow rate. Every cost is linear, so all numbers are recomputed exactly.
 
-- **Overview:** the pre-registered verdict, headline numbers and confidence intervals.
-- **Strategies:** equity, drawdown, Sharpe by cost and year, and a one-day delay toggle. Costs are linear in traded notional, so the cost slider recomputes every number exactly.
+- **Overview:** the pre-registered verdict (and the realistic-cost verdict), headline numbers and confidence intervals.
+- **Strategies:** equity, drawdown, Sharpe against cost (or spread multiplier) and by year, and a one-day delay toggle.
 - **Risk:** rolling beta, net exposure and turnover.
 - **Signal:** any stock's s-score with OU's trades and each network's scores, plus the learned rule and the Transformer's attention.
-- **Integrity:** the protocol, every configuration tried, and the bugs the checks caught.
+- **Integrity:** the protocol, every configuration tried, the power analysis, and the bugs the checks caught.
 
 It reads only small result files, with no models or price data:
 
@@ -191,7 +230,7 @@ Python 3.10+, in a virtual environment. A CUDA GPU is optional; a 4 GB card is e
 ```bash
 pip install -r requirements.txt
 pip install -e .
-pytest                                                  # 74 tests
+pytest                                                  # 79 tests
 ```
 
 Reproduce the study:
@@ -204,10 +243,12 @@ python scripts/train_model.py --model transformer --tune  # also mlp, temporal_c
 python scripts/train_tabular.py --model gbm --tune --walk-forward   # also ridge
 python scripts/walk_forward.py --model transformer      # yearly retraining, 2020-2023 (--no-cost for the ablation)
 python scripts/run_backtest.py                          # results, significance tests and the verdict
+python scripts/run_backtest.py --costs realistic        # the same under spread tiers and borrow fees
+python scripts/power_analysis.py                        # minimum detectable effects
 python scripts/export_dashboard.py                      # small files for the dashboard
 ```
 
-Add `--holdout` to `walk_forward.py`, `train_tabular.py --walk-forward` and `run_backtest.py` for the 2024–25 run.
+Add `--holdout` to `walk_forward.py`, `train_tabular.py --walk-forward` and `run_backtest.py` (with or without `--costs realistic`) for the 2024–25 run.
 
 For the 400-stock run, set `SHARPEE_VARIANT=n400` first. The scripts then read and write `runs/n400/` and `reports/n400/`, using the frozen settings copied there.
 
@@ -218,19 +259,19 @@ The notebooks run top to bottom, e.g. `python -m nbconvert --to notebook --execu
 ```
 app/              Streamlit dashboard and its data layer
 configs/          data, experiment and model settings (YAML); variants/ for robustness runs
-docs/             project plan, pre-registered protocol, baseline amendment, 400-stock check
+docs/             project plan, pre-registered protocol, baseline amendment, 400-stock and realistic-cost checks
 src/sharpee/
   data/           universe, download, cleaning and eligibility, synthetic markets
   features/       returns, rolling PCA residuals, diagnostics
   strategies/     OU s-score baseline
   portfolio/      shared weight construction and exposure diagnostics
-  backtest/       accounting, costs, backtest engine
+  backtest/       accounting, flat and per-stock costs, borrow fees, backtest engine
   models/         MLP, temporal CNN, Transformer
   training/       day-block dataset, Sharpe-after-costs loss, training loop, trial log, ridge and gradient boosting
   evaluation/     metrics, walk-forward folds, significance tests, strategy books
 notebooks/        01 data, 02 residuals, 03 training, 04 results (outputs saved)
 scripts/          command-line entry points for every step
-tests/            74 tests, including the look-ahead test
+tests/            79 tests, including the look-ahead test
 reports/          research report, findings write-up, figures, results; n400/ for the 400-stock run and dashboard data
 ```
 
@@ -244,20 +285,20 @@ reports/          research report, findings write-up, figures, results; n400/ fo
 - [x] Ridge and gradient-boosting baselines (pre-registered amendment)
 - [x] 400-stock robustness check
 - [x] [Power analysis](#power-analysis-what-could-this-test-detect): the smallest Sharpe and Sharpe difference the design can detect
+- [x] [Realistic costs](#realistic-costs-spread-tiers-and-borrow-fees): per-stock spread tiers and borrow fees, at evaluation
 - [x] Interactive dashboard and research report
 
 **Next**
 
-- [ ] **Borrow fees and per-stock spreads, at evaluation only.** Charge an annual borrow rate on short notional, with a stress case, and per-stock spreads by liquidity tier (trailing dollar volume, no look-ahead). The saved model scores are reused, so no retraining is needed. This fixes the main weakness of the 400-stock run.
 - [ ] **Live paper trading.** A daily GitHub Actions job runs the frozen models after the close and records an out-of-sample track record, with MLflow experiment tracking.
 
 **Future work**
 
 - **More realistic costs:**
-  - spreads estimated from daily highs and lows (Corwin–Schultz);
+  - spreads estimated per stock from daily highs and lows (Corwin–Schultz) instead of liquidity tiers, and hard-to-borrow rates for individual names;
   - square-root market impact, cost ≈ k · σ · √(trade / ADV), for $10M and $100M books;
   - execution at the next open;
-  - training on the per-stock spread cost, which stays differentiable. The dashboard's exact cost slider would then cover the linear spread part only.
+  - training on the per-stock spread cost, which stays differentiable. Impact would then apply at evaluation only, since it is not linear and the dashboard's exact cost controls cover linear costs only.
 - **More statistical power:**
   - 10–20 seeds per model, which cuts training noise but not test-period noise;
   - a broader universe once costs are realistic;
@@ -272,10 +313,10 @@ reports/          research report, findings write-up, figures, results; n400/ fo
 - **Survivorship bias remains.** Yahoo has no prices for 250 of the 884 historical members, mostly delisted or acquired companies. Coverage rises from 67% of members in 2008 to 98% in 2025, so results are likely biased upward.
 - **Simplified execution.**
   - Trades happen at the close.
-  - Costs are a flat proportional rate, with no impact and no borrow fees.
+  - Costs are linear: a flat rate in the primary results, and liquidity-tier spreads plus a uniform borrow fee in the realistic check. There is no market impact, and the tiers are assumptions rather than quote-based estimates.
   - Weights don't drift between daily rebalances.
 
-  A flat 5 bps is especially optimistic for the 400-stock run.
+  The models were trained on the flat 5 bps, so the realistic check shows how they fare under costs they were not optimized for.
 - **Simplified relative to Avellaneda–Lee.** PCA is refit monthly rather than daily, and the s-score has no drift adjustment.
 - **Short samples.** With four test years, Sharpe ratios within about one point of each other can't be told apart.
 - **Few seeds.** With 3 seeds per model, one failed seed in one year moves the combined result noticeably.
