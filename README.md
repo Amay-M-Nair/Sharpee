@@ -1,33 +1,69 @@
-# Sharpee: cost-aware deep learning for statistical arbitrage
+# Sharpee
 
-A research framework that compares a classical mean-reversion strategy with neural trading models and non-neural machine-learning baselines on US equities. The neural models are trained to maximize the **portfolio's Sharpe ratio after transaction costs**, not to forecast prices; the ridge and gradient-boosting baselines forecast, as standard machine learning would. Everything is evaluated walk-forward, with no look-ahead.
+**Cost-aware deep learning for statistical arbitrage on US equities.**
 
-> **Status: research complete (Phases 1-3), dashboard and report built (Phase 4a).** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, a pre-registered test on the sealed 2020–2023 years, a one-shot 2024–25 holdout, ridge and gradient-boosting baselines, a 400-stock robustness check, an interactive dashboard and a [research report](reports/research_report.md). Live paper trading with GitHub Actions and MLflow tracking come next (Phase 4b).
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c)
+![Tests](https://img.shields.io/badge/tests-71%20passing-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-**Built with:** Python, PyTorch, scikit-learn, NumPy, pandas, SciPy, Streamlit, Plotly, pytest, Jupyter.
+Sharpee asks whether a neural network trained end-to-end on a portfolio's **Sharpe ratio after trading costs** can beat the classic Avellaneda–Lee mean-reversion rule. It removes market and sector moves from S&P 500 stocks with rolling PCA, then trades the leftover residuals with three strategy families:
 
-**Read more:** [research report](reports/research_report.md) · [findings, figure by figure](reports/README.md) · [interactive dashboard](#interactive-dashboard)
+- the textbook **Ornstein–Uhlenbeck (OU)** rule;
+- **neural networks** (MLP, temporal CNN, Transformer) trained on after-cost Sharpe;
+- **non-neural ML** (ridge, gradient boosting) that forecast first and trade second.
 
-## At a glance
+Every result is out-of-sample, walk-forward and free of look-ahead. The pass/fail rules were committed before the test years were opened.
 
-| | Result |
-|---|---|
-| **Universe** | The 150 most liquid point-in-time S&P 500 stocks each day, 2010–2025 (primary); 400 as a robustness check |
-| **Classic baseline (OU)**, test years 2020–2023 | Sharpe 0.94 before costs, 0.15 after 5 bps costs |
-| **Best neural model (Transformer)**, validation 2018–2019 | Net Sharpe +0.21 vs. OU's −0.35, with a third less trading |
-| **Pre-registered test, 2020–2023** | No reliable edge after costs: Transformer +0.17 vs. OU +0.15 net Sharpe, not statistically distinguishable |
-| **One-shot holdout, 2024–2025** | Every strategy lost as residual reversion broke down; at 150 stocks the learned models lost far less (Transformer −0.55 vs. OU −1.65), at 400 they did not |
-| **What held up** | Training on costs beat the same model without them in every seed; the learned models degrade about half as fast as OU with higher costs or a one-day delay |
-| **Versus non-neural ML** | Gradient boosting and ridge, which forecast then trade, find as much raw signal but lose it to turnover; the Transformer beats gradient boosting on both periods |
-| **Robustness: 400 stocks** | Same verdict, no reliable edge after costs. The networks did better (Transformer +0.39, MLP +0.40 vs OU −0.04 net on 2020–2023), but not significantly, and lost about as much as OU in 2024–2025 |
-| **Market exposure** | Beta ≈ 0 for every strategy |
-| **Correctness** | 71 tests, a look-ahead test and a synthetic sanity check; 3 bugs caught and fixed |
+> **Finding:** no strategy shows a statistically reliable edge after costs. Training on costs is what makes the learned models cheaper and more robust to trade. The same signal traded by forecast-then-trade models is lost to turnover.
+
+**Read more:** [research report](reports/research_report.md) · [findings, figure by figure](reports/README.md) · [interactive dashboard](#interactive-dashboard) · [pre-registered protocol](docs/phase3_protocol.md)
+
+## Contents
+
+- [Key results](#key-results)
+- [How it works](#how-it-works)
+- [Evaluation protocol](#evaluation-protocol)
+- [Robustness: a 400-stock universe](#robustness-a-400-stock-universe)
+- [How correctness is verified](#how-correctness-is-verified)
+- [Interactive dashboard](#interactive-dashboard)
+- [Getting started](#getting-started)
+- [Repository layout](#repository-layout)
+- [Roadmap](#roadmap)
+- [Limitations](#limitations)
+- [References](#references) · [License](#license)
+
+## Key results
+
+Primary universe: the 150 most liquid point-in-time S&P 500 stocks each day. Net Sharpe ratios; neural models have 3 seeds combined.
+
+| Strategy | How it trades | Gross Sharpe, 2020–23 | Net, 5 bps | Net, 10 bps | Turnover per day | Holdout 2024–25, net 5 bps |
+|---|---|---|---|---|---|---|
+| OU | Fixed s-score rules | **0.94** | +0.15 | −0.65 | 23.8% | −1.65 |
+| Ridge | Forecast, then trade | 0.70 | −0.32 | −1.34 | 52.6% | −0.81 |
+| Gradient boosting | Forecast, then trade | 0.84 | −1.77 | −4.37 | 100.5% | −2.17 |
+| MLP | Sharpe after costs | 0.55 | +0.16 | −0.23 | 19.0% | −0.48 |
+| Temporal CNN | Sharpe after costs | 0.34 | −0.12 | −0.58 | 20.8% | −0.78 |
+| **Transformer** | Sharpe after costs | 0.51 | **+0.17** | **−0.16** | **15.6%** | **−0.55** |
+
+![Net Sharpe against trading cost and execution delay](reports/figures/04_cost_and_delay.png)
+
+**What the evidence supports**
+
+1. **No reliable edge after costs.** The Transformer, named the primary candidate in advance, fails all three pre-registered rules. Its PSR is 0.64 and its DSR 0.24, both against a 0.95 bar. Its edge over OU is +0.03, with a 95% interval of −0.84 to +0.98.
+2. **Costs in the loss work.** The same Transformer trained without costs did worse in every seed (+0.17 vs −0.08 net) and traded about 50% more.
+3. **The learned models are more robust.** OU has the strongest raw signal but needs cheap, immediate execution. The Transformer trades a third less, so it degrades about half as fast as costs rise and barely notices a one-day delay.
+4. **Optimizing the objective beats forecast-then-trade.** Gradient boosting finds more raw signal than the networks (gross Sharpe 0.84 vs 0.51), then loses it by rebuilding the whole book every day. The Transformer beats it by +1.94 (95% CI +0.82 to +3.78), the one pre-registered comparison that passed.
+5. **The networks learned a rule OU can't express:** revert moderate residual moves, follow extreme ones, which are often news-driven. Ridge and gradient boosting learned it too, so the pattern is in the data.
+6. **The signal broke down in 2024–25.** Every strategy lost after costs, and OU and the networks lost even before them. At 150 stocks the learned models lost far less than OU, but this did not replicate at 400 stocks.
+
+All portfolios are factor-hedged, with market beta of about 0.1 or less.
 
 ## How it works
 
 ```mermaid
 flowchart TD
-    A["S&P 500 membership + Yahoo prices"] --> B["Daily eligibility: 150 most liquid"]
+    A["S&P 500 membership + Yahoo prices"] --> B["Daily point-in-time eligibility: N most liquid"]
     B --> C["Rolling PCA: residual returns"]
     C --> D1["OU: fixed s-score rules"]
     C --> D2["MLP / temporal CNN / Transformer: trained on Sharpe after costs"]
@@ -38,135 +74,42 @@ flowchart TD
     E --> F["Backtest: next-day returns minus costs"]
 ```
 
-1. **Remove what the market and sectors did.** Each stock's daily return is split into a part explained by 5 PCA factors and a stock-specific **residual**.
-2. **Bet that residuals snap back.** Three kinds of strategy read each stock's last 30 days of residual moves:
-   - **OU** (classic baseline): fixed Avellaneda–Lee rules.
-   - **Neural networks** (MLP, temporal CNN, Transformer): learn their own rule, trained directly on the portfolio's Sharpe ratio after costs.
-   - **Non-neural ML** (ridge, gradient boosting): standard forecast-then-trade, predicting each stock's next-day residual payoff and trading the forecasts.
-3. **Hold hedged positions.** Every bet is long the stock and short its factor exposure, so the portfolio stays market-neutral.
-4. **Charge realistic costs.** Weights set at the close earn the next day's return minus 5 bps per unit traded. The networks are trained on exactly this after-cost result.
+1. **Remove what the market and sectors did.** Five PCA factors are refit monthly on the trailing year. Each stock's return splits into a factor part and a residual `ε = ΦR`, where `Φ = I − BQᵀ` uses only data before the decision date.
+2. **Bet that residuals snap back.** Each strategy reads a stock's last 30 days of cumulative residual:
+   - **OU** fits an AR(1) and trades the s-score with the published Avellaneda–Lee thresholds.
+   - **The networks** output a score per stock. That score flows through the portfolio layer and cost model into a loss equal to minus the portfolio's after-cost Sharpe, so heavy trading is penalized directly.
+   - **Ridge and gradient boosting** predict each stock's next-day residual payoff and trade the forecasts.
+3. **Hold hedged positions.** A shared layer turns residual bets into stock weights `x = Φᵀw`, so each bet is long the stock and short its factor exposure. Each bet is capped at 2% *before* hedging, so the cap can't break the hedge. Gross exposure is at most 1.
+4. **Charge costs.** Weights set at the close of day *t* earn the *t → t+1* return. Costs are charged per unit of traded notional: 5 bps by default, with 0–20 bps and a one-day execution delay as sensitivity checks.
 
-## Phase 1: data and baseline
-
-| Component | What it does |
+| Component | Details |
 |---|---|
-| **Point-in-time universe** | Uses historical S&P 500 membership (884 tickers, 2008–2025), not today's constituents. Eligibility is decided day by day: index member, enough history, price > $5, top 150 by dollar volume. |
-| **Rolling PCA residuals** | Monthly refits remove 5 market/sector factors. The residual is `ε = Φ R` with `Φ = I − B Qᵀ`, estimated only from data before each decision date. |
-| **OU baseline** | Avellaneda–Lee (2010): fits an AR(1) to 60-day cumulative residuals, trades on the s-score, and only trades stocks with a short mean-reversion half-life. |
-| **Factor-hedged portfolio** | One shared layer maps residual positions to stock weights `x = Φᵀw` (each position is long the stock, short its factor hedge). Each residual bet is capped at 2% *before* hedging, so the cap can't break the hedge, and gross exposure is at most 1. Every strategy uses it. |
-| **Cost-aware backtester** | Weights set at close *t* earn the *t → t+1* return. Costs are charged per unit of traded notional (0–20 bps), and a one-day execution-delay check is built in. |
-| **Walk-forward folds** | Expanding training window, 2-year validation, yearly test, 30-day embargoes. 2024–25 is a holdout that gets run once, at the end. |
+| **Universe** | Historical S&P 500 membership (884 tickers, 2008–2025), not today's constituents. A stock is eligible on a day if it's an index member, has 312 days of history and a price above $5, and ranks in the top N by 20-day median dollar volume. Delisted names are kept. |
+| **Models** | An MLP, a temporal CNN with dilated 1-D convolutions, and a compact Transformer whose encoder blocks come from my own transformer-from-scratch project. Each training example is a block of 64 consecutive days × all stocks. |
+| **Tuning** | A small grid on the first fold only (2010–2017 train, 2018–2019 validation): 15 configurations, plus 7 for the later baselines. Every configuration is logged, and the Deflated Sharpe Ratio uses that count. |
 
-### Phase 1 results: OU baseline on the test years 2020–2023
+On the 2018–19 validation years, the Transformer matched OU's gross Sharpe (0.82 vs 0.81) with a third less turnover, which turned OU's −0.35 net into +0.21. The sealed test years showed how much of that was selection: see [Phase 2 in the findings](reports/README.md#phase-2-neural-models-on-walk-forward-fold-1).
 
-OU has no trained parameters (it uses the published Avellaneda–Lee thresholds), so it can be reported on the test years already. The neural models are only evaluated there in Phase 3.
+## Evaluation protocol
 
-Before trading, the residuals pass these checks:
+- **Walk-forward:** an expanding training window, 2-year validation, and a yearly test from 2020 to 2023, with 30-day embargoes at every boundary. Each neural model is retrained every year with 3 seeds and frozen settings.
+- **Pre-registration:** the primary candidate, metric and rules were committed in [`docs/phase3_protocol.md`](docs/phase3_protocol.md) before any test-year result existed. Later additions each have their own document, committed before they ran: the [non-neural baselines](docs/phase3_amendment_baselines.md) and the [400-stock check](docs/robustness_universe_400.md).
+- **Significance:**
+  - the Probabilistic Sharpe Ratio (PSR);
+  - the Deflated Sharpe Ratio (DSR), adjusted for every configuration tried;
+  - stationary-bootstrap confidence intervals, including paired intervals on Sharpe differences.
+- **One-shot holdout:** 2024–2025 was run once, after everything else was frozen and committed.
 
-| Check | Raw returns | Residuals |
-|---|---|---|
-| Mean \|correlation\| with the market | 0.61 | **0.06** |
-| Share of raw return variance remaining | 100% | 43% |
-| Median OU half-life | — | 8.5 trading days |
-
-Strategy performance:
-
-| Cost per unit traded | Ann. return | Ann. vol | Sharpe | Max drawdown |
-|---|---|---|---|---|
-| 0 bps | 3.6% | 3.8% | **0.94** | −4.9% |
-| 5 bps | 0.6% | 3.8% | **0.15** | −8.0% |
-| 10 bps | −2.4% | 3.8% | −0.65 | −14.4% |
-| 0 bps, 1-day delay | 1.3% | 3.7% | 0.36 | −6.2% |
-
-![OU baseline equity](reports/figures/ou_equity_test.png)
-
-- **The mean-reversion signal is real but small.** The strategy trades about 24% of the book per day, so 5 bps costs take most of its gross return and 10 bps take all of it. This matches the documented decline of classical stat arb.
-- **The edge decays within a day.** Most of it disappears with a one-day execution delay.
-- **Market exposure is low:** beta is 0.05.
-- **This set the question for Phase 2:** can a model keep the edge while trading less?
-
-## Phase 2: neural models
-
-| Component | What it does |
-|---|---|
-| **Three scoring models** | An MLP, a temporal CNN (dilated 1-D convolutions) and a compact Transformer whose encoder blocks are reused from my transformer-from-scratch project. Each reads a stock's last 30 days of cumulative residual and outputs one score. |
-| **Sharpe-after-costs training** | A training example is a block of 64 consecutive days × all 150 stocks. Scores go through the same portfolio layer and cost model as OU, and the loss is the negative Sharpe ratio of the portfolio's daily returns after 5 bps costs. Gradients flow through `Φᵀw`, the cap and the costs, so trading too much is penalized directly. |
-| **Fold 1 tuning only** | A small grid per model (15 configurations in total, including OU's threshold), trained on 2010–2017 and validated on 2018–2019 with early stopping. Every configuration tried is logged; the Deflated Sharpe Ratio uses that count in Phase 3. The 2020–2023 test years stay sealed. |
-| **Seed check** | Each model's best configuration is retrained with 3 random seeds, so a lucky initialization can't pass for a better model. |
-
-### Phase 2 results: validation 2018–2019, 3 seeds per model
-
-| Strategy | Gross Sharpe | Net Sharpe, 5 bps | Turnover per day | Beta |
-|---|---|---|---|---|
-| OU baseline | 0.81 | −0.35 | 23.7% | 0.00 |
-| MLP | 0.76 | +0.05 ± 0.05 | 18.1% | 0.00 |
-| Temporal CNN | 0.62 | −0.06 ± 0.15 | 17.4% | −0.01 |
-| **Transformer** | **0.82** | **+0.21 ± 0.02** | **15.5%** | 0.00 |
-
-![Validation comparison](reports/figures/03_validation_comparison.png)
-
-- **Same signal, less trading.** The Transformer matches OU's gross Sharpe with about a third less turnover. That turns OU's loss after costs into a profit, consistently across seeds, and breaks even at about 7 bps against OU's 3.5.
-- **The networks learned a rule OU can't express.** All three independently learned to bet on reversion for moderate residual moves and on *continuation* for extreme ones, which are often news-driven ([details](reports/README.md#14-what-the-networks-learned-revert-small-moves-follow-big-ones)).
-- **Not yet evidence.** These are validation numbers that were also used to choose configurations, and one Sharpe over 473 days has a standard error of about 0.7. Phase 3's sealed test years and the Deflated Sharpe Ratio decide.
-
-**Why everything is built this way:** [reports/README.md](reports/README.md) walks through 14 figures from both phases (data coverage, fat tails, factor structure, residual autocorrelation, half-lives, costs, training stability, turnover, what the networks learned) and the design decision each one supports.
-
-## Phase 3: the sealed test years, 2020–2023
-
-The rules were committed in [`docs/phase3_protocol.md`](docs/phase3_protocol.md) **before** any test-year model result existed. Each neural model was retrained every year (walk-forward) with frozen settings and 3 seeds, and the Transformer was named the primary candidate in advance.
-
-| Pre-registered rule for the Transformer | Result | Needed | Outcome |
+| Pre-registered rule for the Transformer, 2020–2023 | Result | Needed | Outcome |
 |---|---|---|---|
-| 1. Edge after costs (Probabilistic Sharpe Ratio) | 0.64 | ≥ 0.95 | fail |
-| 2. Survives 15 configurations tried (Deflated Sharpe Ratio) | 0.24 | ≥ 0.95 | fail |
-| 3. Beats OU (paired bootstrap Sharpe difference) | +0.03, 95% CI −0.84 to +0.98 | interval excludes 0 | fail |
+| 1. Edge after costs (PSR) | 0.64 | ≥ 0.95 | fail |
+| 2. Survives 15 configurations tried (DSR) | 0.24 | ≥ 0.95 | fail |
+| 3. Beats OU (paired bootstrap) | +0.03, 95% CI −0.84 to +0.98 | interval excludes 0 | fail |
+| 4. Beats gradient boosting (amendment) | +1.94, 95% CI +0.82 to +3.78 | interval excludes 0 | **pass** |
 
-**Verdict: no reliable edge after costs.**
+## Robustness: a 400-stock universe
 
-| Net Sharpe, 2020–2023 | 0 bps | 5 bps | 10 bps | 20 bps | 5 bps, one day late | Turnover per day |
-|---|---|---|---|---|---|---|
-| OU | **0.94** | 0.15 | −0.65 | −2.24 | −0.44 | 23.8% |
-| MLP | 0.55 | 0.16 | −0.23 | −1.01 | −0.02 | 19.0% |
-| Temporal CNN | 0.34 | −0.12 | −0.58 | −1.50 | −0.25 | 20.8% |
-| **Transformer** | 0.51 | **0.17** | **−0.16** | **−0.83** | **−0.03** | **15.6%** |
-
-![Cost and delay](reports/figures/04_cost_and_delay.png)
-
-- **No winner at 5 bps.** The Transformer earns +0.17 against OU's +0.15, and with only four years of data the intervals are about 1.8 Sharpe points wide.
-- **The learned models are far more robust.** OU has the strongest raw signal but needs cheap, immediate execution. The Transformer trades a third less, so it degrades about half as fast as costs rise and barely notices a one-day delay.
-- **Costs in the loss work.** Retraining the same Transformer without costs in its loss made it worse in every seed (combined +0.17 vs −0.08) and raised turnover from 15.6% to 23.7%.
-- **The learned rule holds out of sample:** revert moderate residual moves, follow extreme ones.
-- **One seed broke in one year.** Seed 0's 2023 model never trained past its starting point and lost heavily; the protocol keeps it in.
-
-### The one-shot holdout, 2024–2025
-
-Run once, after all of the above was committed, with the same frozen settings:
-
-| Net Sharpe, 5 bps | OU | MLP | Temporal CNN | Transformer |
-|---|---|---|---|---|
-| 2024–2025 | −1.65 | −0.48 | −0.78 | **−0.55** |
-
-Every original strategy lost, even before costs: residual mean reversion broke down in 2024, when the first factor's share of variance hit multi-year lows and stocks kept trending on their own stories. The learned models lost far less than OU, helped by trading less and by following extreme moves instead of fading them, though this advantage did not replicate on 400 stocks (see the robustness check). The verdict is again **no reliable edge after costs**.
-
-### Amendment: non-neural baselines
-
-Matching OU doesn't show how the networks compare with standard machine learning on the same inputs. Two baselines were added afterwards, with their own rules committed in [`docs/phase3_amendment_baselines.md`](docs/phase3_amendment_baselines.md) before they saw the test years. They use the same inputs, portfolio layer, costs and folds:
-
-| Net of 5 bps | Training | Gross Sharpe 2020–23 | Net 2020–23 | Net 2024–25 | Turnover per day |
-|---|---|---|---|---|---|
-| Ridge | Forecast next-day payoff, then trade | 0.70 | −0.32 | −0.81 | 52.6% |
-| Gradient boosting | Forecast next-day payoff, then trade | 0.84 | −1.77 | −2.17 | 100.5% |
-| **Transformer** | Sharpe after costs | 0.51 | **+0.17** | **−0.55** | **15.6%** |
-
-- **Beats gradient boosting (rule 4): yes**, +1.94 on 2020–23 (95% CI +0.82 to +3.78) and +1.62 on the holdout. But gradient boosting finds *more* raw signal; it loses by rebuilding the whole book every day. This is a win for cost-aware training over forecast-then-trade.
-- **Versus ridge:** +0.50 (95% CI −0.32 to +1.56), not distinguishable.
-- **Conclusion: training on after-cost Sharpe beats forecast-then-trade.** Even ridge and gradient boosting learned the same "revert small, follow big" rule, so the rule is in the data. (A linear control was later removed from the amendment; see its deviation note.)
-
-Full details: [findings write-up](reports/README.md#21-amendment-non-neural-baselines-the-objective-beats-forecast-then-trade), [Phase 3 sections](reports/README.md#phase-3-the-sealed-test-years-2020-2023) and [notebook 04](notebooks/04_results.ipynb).
-
-### Robustness check: a 400-stock universe
-
-Do the conclusions survive a wider, less liquid universe? The check was pre-registered in [`docs/robustness_universe_400.md`](docs/robustness_universe_400.md) before any 400-stock result existed. It uses the 400 most liquid stocks each day, chosen point-in-time exactly as before, with delisted names kept. Every hyperparameter stays frozen from the 150-stock tuning, and the networks are retrained with the same folds and seeds. The 150-stock results above remain the primary findings.
+The same study was rerun on the 400 most liquid stocks each day. They were chosen point-in-time with the same filters, with delisted names kept. Every hyperparameter stayed frozen from the 150-stock tuning; only the networks were retrained.
 
 | Net Sharpe | 150 stocks, 5 bps | **400 stocks, 5 bps** | 150 stocks, 10 bps | **400 stocks, 10 bps** | 400 stocks, 2024–25, 5 bps |
 |---|---|---|---|---|---|
@@ -177,134 +120,156 @@ Do the conclusions survive a wider, less liquid universe? The check was pre-regi
 | Temporal CNN | −0.12 | **+0.20** | −0.58 | **−0.17** | −1.44 |
 | **Transformer** | +0.17 | **+0.39** | −0.16 | **+0.09** | −0.83 |
 
-2020–2023 unless marked. Neural models are 3 seeds combined.
+2020–2023 unless marked.
 
-- **The verdict holds: no reliable edge after costs.** The Transformer's PSR is 0.79, its DSR is 0.40, and its edge over OU is +0.43 with a 95% interval of −0.31 to +1.31. All three rules fail again, as pre-registered.
-- **The networks gained from the wider universe and the others did not.** The extra names raise gross Sharpe for every learned model (Transformer 0.51 → 0.70, gradient boosting 0.84 → 1.05), while OU's falls (0.94 → 0.82). The networks trade only 17–20% of the book per day and keep most of the gain. OU (31%), ridge (86%) and gradient boosting (107%) trade more, and costs take more than the extra signal adds.
-- **Beats gradient boosting (rule 4): yes again.** The margin is +1.53 on 2020–2023 (95% CI +0.77 to +3.08) and +1.95 on the holdout. Against ridge, the Transformer now also wins on 2020–2023: +1.03 (95% CI +0.37 to +2.05).
-- **The holdout is weaker for the networks.** In 2024–25 they lost about as much as OU (Transformer −0.83 vs OU −0.79), unlike the clear advantage at 150 stocks. OU and the forecasting baselines still had a positive gross signal there, while the networks did not.
-- **Costs are optimistic.** A flat 5 bps understates trading costs for stocks ranked 150–400 by liquidity, so the 10 bps column is the more realistic one. At 10 bps, only the MLP and Transformer stay above zero, and only just.
+- **The verdict holds.** The Transformer has PSR 0.79 and DSR 0.40, and its edge over OU is +0.43 (95% CI −0.31 to +1.31). Rules 1–3 fail; rule 4 passes again, at +1.53 (95% CI +0.77 to +3.08).
+- **The wider universe helps only the low-turnover models.** Gross Sharpe rises for every learned model (Transformer 0.51 → 0.70), while OU's falls (0.94 → 0.82). Only the networks, trading 17–20% of the book a day, keep the gain after costs.
+- **The holdout advantage did not replicate.** In 2024–25 the networks lost about as much as OU.
+- **Costs are optimistic here.** A flat 5 bps understates trading costs for stocks ranked 150–400 by liquidity, so the 10 bps column is the fairer one. Per-stock costs are the [next step](#roadmap).
 
-The interactive dashboard shows this 400-stock run. Results are in [`reports/n400/phase3/`](reports/n400/phase3/).
+Results are in [`reports/n400/phase3/`](reports/n400/phase3/).
+
+## How correctness is verified
+
+- **Look-ahead test:** scramble every price after a cutoff date, rebuild the whole pipeline, and assert that every residual, signal, weight and model score on or before the cutoff is unchanged.
+- **Synthetic sanity check:** with planted mean reversion, OU and all three networks must win (net Sharpe +19 to +22). With random-walk residuals, none may earn anything.
+- **71 unit tests:**
+  - hand-worked P&L, cost and timing examples;
+  - the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`;
+  - eligibility rules and factor-neutral capping;
+  - the loss and its gradients;
+  - PSR, DSR and bootstrap intervals against hand-computed values;
+  - the dashboard's numbers against the official results.
+
+**What the checks caught.** Each fix has a regression test, and affected runs were excluded from the trial log.
+
+1. **NaN training blocks.** A rare 1-day block had an undefined Sharpe ratio, which silently poisoned the weights.
+2. **A cap that broke the hedge.** Capping stock weights after hedging let the MLP become 80–90% correlated with the S&P 500, so its apparent edge was really the bull market.
+3. **A collapsed model.** Without score centering, a constant output acted as an equal-weight bet, and every network collapsed onto it.
 
 ## Interactive dashboard
 
-A dark-themed Streamlit app with a top navigation bar lets anyone explore the results without running the research. It shows the **400-stock run**; the primary 150-stock results are the tables above. A control strip under the bar switches between the 2020–2023 test years and the 2024–2025 holdout and sets the trading cost for every page:
+A dark-themed Streamlit app shows the **400-stock run**. A control strip switches between the 2020–2023 test years and the 2024–2025 holdout, and sets the trading cost for every page:
 
 - **Overview:** the pre-registered verdict, headline numbers and confidence intervals.
-- **Strategies:** equity, drawdown, Sharpe vs cost and by year, and a one-day execution-delay toggle. The **cost slider** recomputes every number exactly (costs are linear in traded notional).
-- **Risk:** rolling beta, net exposure and turnover, the ongoing check that every book stays market-neutral.
-- **Signal:** pick any stock to see its s-score with OU's trades and each network's scores, plus the learned rule and Transformer attention.
+- **Strategies:** equity, drawdown, Sharpe by cost and year, and a one-day delay toggle. Costs are linear in traded notional, so the cost slider recomputes every number exactly.
+- **Risk:** rolling beta, net exposure and turnover.
+- **Signal:** any stock's s-score with OU's trades and each network's scores, plus the learned rule and the Transformer's attention.
 - **Integrity:** the protocol, every configuration tried, and the bugs the checks caught.
 
-It reads only small result files in `reports/` (no models or price data), so it loads instantly:
+It reads only small result files, with no models or price data:
 
 ```bash
 pip install -r app/requirements.txt
 streamlit run app/dashboard.py
 ```
 
-To host it for free, deploy the repository on [Streamlit Community Cloud](https://share.streamlit.io) with `app/dashboard.py` as the entry point; it installs the light `app/requirements.txt`.
+To host it for free, deploy the repository on [Streamlit Community Cloud](https://share.streamlit.io) with `app/dashboard.py` as the entry point.
 
-## How correctness is verified
+## Getting started
 
-- **Look-ahead test:** scramble every price after a cutoff date, rebuild the whole pipeline, and assert that every residual, signal, weight and model score on or before the cutoff is unchanged.
-- **Synthetic sanity check:** with planted mean reversion, OU and all three networks must win (net Sharpe +19 to +22). With pure random-walk residuals, none may earn anything (net Sharpe at or below zero). Networks are scored on a held-out segment, so a lucky validation period can't pass.
-- **71 unit tests:** hand-worked P&L, cost and timing examples; the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`; eligibility rules; portfolio constraints, including that the capped book stays factor-neutral; the loss and its gradients; metrics; PSR, DSR and bootstrap intervals against hand-computed values; and the dashboard's numbers against the official Phase 3 results.
-
-### What the checks caught
-
-1. **NaN training blocks.** Random cut points occasionally produced a 1-day training block, whose Sharpe is undefined, and the NaN silently poisoned the model weights. The synthetic check flagged it, because every network scored exactly 0. Blocks are now at least 32 days, and a broken return series reports NaN instead of 0.
-2. **A cap that broke the hedge.** The 2% cap was first applied to stock weights *after* hedging, which cut a stock's leg but kept its hedge legs. The MLP learned to exploit this: its portfolio became 80–90% correlated with the S&P 500, and its apparent edge was really riding the 2010–2019 bull market. The cap now applies to residual bets before hedging. A regression test fails under the old order and passes under the new one.
-3. **A collapsed model.** Removing score centering let a constant output act as an equal-weight bet on every residual at once, and the networks collapsed onto it (every Transformer configuration scored the same Sharpe). Model scores are centered again, so a constant output now holds no position.
-
-Runs affected by these bugs were excluded from the trial log, and each fix has a regression test.
-
-## Run it
-
-Python 3.10+, in a virtual environment:
+Python 3.10+, in a virtual environment. A CUDA GPU is optional; a 4 GB card is enough.
 
 ```bash
 pip install -r requirements.txt
 pip install -e .
-python scripts/download_data.py      # membership + Yahoo prices -> data/ (about 10 min)
-python scripts/run_baseline.py       # OU baseline -> reports/
-python scripts/sanity_synthetic.py   # pipeline check on synthetic markets
-python scripts/run_baseline.py --tune                     # OU threshold on Fold 1 validation
-python scripts/train_model.py --model transformer --tune  # same for mlp and temporal_cnn; --resume skips logged configs
-python scripts/walk_forward.py --model transformer        # yearly retraining on 2020-2023 (also mlp, temporal_cnn; --no-cost for the ablation)
-python scripts/train_tabular.py --model gbm --tune --walk-forward   # ridge and gradient-boosting baselines
-python scripts/run_backtest.py                           # test-year results, significance tests and the verdict
-python scripts/export_dashboard.py                       # small result files for the dashboard
-streamlit run app/dashboard.py
-pytest
+pytest                                                  # 71 tests
 ```
 
-For the 400-stock robustness run, set `SHARPEE_VARIANT=n400` before `walk_forward.py`, `train_tabular.py --walk-forward`, `run_backtest.py` and `export_dashboard.py`. They then read and write `runs/n400/` and `reports/n400/`, using the frozen 150-stock settings copied into `runs/n400/`.
+Reproduce the study:
 
-The notebooks run top to bottom with the project's environment, e.g. `python -m nbconvert --to notebook --execute --inplace notebooks/04_results.ipynb`.
+```bash
+python scripts/download_data.py                         # membership + Yahoo prices -> data/ (about 10 min)
+python scripts/sanity_synthetic.py                      # pipeline check on synthetic markets
+python scripts/run_baseline.py --tune                   # OU threshold on Fold 1
+python scripts/train_model.py --model transformer --tune  # also mlp, temporal_cnn; --resume skips logged configs
+python scripts/train_tabular.py --model gbm --tune --walk-forward   # also ridge
+python scripts/walk_forward.py --model transformer      # yearly retraining, 2020-2023 (--no-cost for the ablation)
+python scripts/run_backtest.py                          # results, significance tests and the verdict
+python scripts/export_dashboard.py                      # small files for the dashboard
+```
+
+Add `--holdout` to `walk_forward.py`, `train_tabular.py --walk-forward` and `run_backtest.py` for the 2024–25 run.
+
+For the 400-stock run, set `SHARPEE_VARIANT=n400` first. The scripts then read and write `runs/n400/` and `reports/n400/`, using the frozen settings copied there.
+
+The notebooks run top to bottom, e.g. `python -m nbconvert --to notebook --execute --inplace notebooks/04_results.ipynb`.
 
 ## Repository layout
 
 ```
 app/              Streamlit dashboard and its data layer
-configs/          data, experiment, OU baseline and model settings (YAML); variants/ for robustness runs
-docs/             full project plan (v2), the pre-registered Phase 3 protocol, its baseline amendment and the 400-stock robustness check
+configs/          data, experiment and model settings (YAML); variants/ for robustness runs
+docs/             project plan, pre-registered protocol, baseline amendment, 400-stock check
 src/sharpee/
-  data/           universe, download, cleaning + eligibility, synthetic markets
+  data/           universe, download, cleaning and eligibility, synthetic markets
   features/       returns, rolling PCA residuals, diagnostics
-  strategies/     OU / s-score baseline
+  strategies/     OU s-score baseline
   portfolio/      shared weight construction and exposure diagnostics
-  backtest/       accounting and costs, backtest engine
-  models/         MLP, temporal CNN, Transformer (+ vendored encoder blocks)
-  training/       day-block dataset, Sharpe-after-costs loss, training loop, trial log, tuning, ridge and gradient boosting
-  evaluation/     metrics, walk-forward folds, significance tests (PSR, DSR, bootstrap), strategy books
-notebooks/        01 data exploration, 02 residual analysis, 03 model training, 04 results (outputs saved, readable on GitHub)
-scripts/          download_data, run_baseline, train_model, train_tabular, walk_forward, run_backtest, export_dashboard, sanity_synthetic
+  backtest/       accounting, costs, backtest engine
+  models/         MLP, temporal CNN, Transformer
+  training/       day-block dataset, Sharpe-after-costs loss, training loop, trial log, ridge and gradient boosting
+  evaluation/     metrics, walk-forward folds, significance tests, strategy books
+notebooks/        01 data, 02 residuals, 03 training, 04 results (outputs saved)
+scripts/          command-line entry points for every step
 tests/            71 tests, including the look-ahead test
-reports/          research report, findings write-up, figures and Phase 3 results; n400/ holds the 400-stock results and the dashboard data
+reports/          research report, findings write-up, figures, results; n400/ for the 400-stock run and dashboard data
 ```
 
 ## Roadmap
 
-1. ~~**Data and baseline:** universe, residuals, OU, backtester, tests~~ ✅
-2. ~~**Neural models:** MLP, temporal CNN and a compact Transformer, trained end-to-end on Sharpe after costs and tuned on Fold 1 only, with every configuration logged~~ ✅
-3. ~~**Evaluation:** a pre-registered protocol, yearly walk-forward retraining on 2020–2023, significance tests, cost and delay sensitivity, the costs-in-loss ablation, and the one-shot 2024–25 holdout~~ ✅ Plus a pre-registered amendment adding ridge and gradient-boosting baselines ✅
-4. **Delivery:**
-   - ~~**4a:** interactive Streamlit dashboard and research report~~ ✅
-   - **4b:** live paper-trading tracker (a daily GitHub Actions job runs the frozen models after the close and records an out-of-sample track record) and MLflow experiment tracking.
+**Done**
 
-## Future work
+- [x] Data pipeline, point-in-time universe, PCA residuals, OU baseline, cost-aware backtester
+- [x] MLP, temporal CNN and Transformer trained on Sharpe after costs; first-fold tuning with every configuration logged
+- [x] Pre-registered walk-forward test, significance tests, cost and delay sensitivity, costs-in-loss ablation, one-shot holdout
+- [x] Ridge and gradient-boosting baselines (pre-registered amendment)
+- [x] 400-stock robustness check
+- [x] Interactive dashboard and research report
 
-**More realistic costs.** This comes first, because a wider universe adds less liquid names.
+**Next**
 
-- **Per-stock spreads:** free data has no bid-ask quotes, so estimate each stock's spread from daily highs and lows (Corwin–Schultz) or from liquidity tiers by dollar volume, using trailing data only.
-- **Market impact:** add a square-root term, cost ≈ k · volatility · √(trade size / average daily volume), for a few assumed book sizes such as $10M and $100M. For liquid names the spread should dominate, which is itself worth showing.
-- **Borrow fees:** the hedge legs are real shorts, so charge a flat annual rate on short notional, plus a harsher stress case.
-- **Execution timing:** trade at the next day's open instead of the close, using OHLC data.
-- **Training vs evaluation:** train on the per-stock spread cost, which is still linear and differentiable. Apply impact and borrow fees at evaluation only, at first.
-- **Dashboard:** the exact cost slider relies on costs being linear, so it would cover the spread component only.
+- [ ] **Power analysis.** State the smallest Sharpe difference this design can detect with four test years. That turns "not significant" into a precise statement of what the test can and cannot see.
+- [ ] **Borrow fees and per-stock spreads, at evaluation only.** Charge an annual borrow rate on short notional, with a stress case, and per-stock spreads by liquidity tier (trailing dollar volume, no look-ahead). The saved model scores are reused, so no retraining is needed. This fixes the main weakness of the 400-stock run.
+- [ ] **Live paper trading.** A daily GitHub Actions job runs the frozen models after the close and records an out-of-sample track record, with MLflow experiment tracking.
 
-**More statistical power.**
+**Future work**
 
-- **Power analysis:** state the smallest Sharpe difference this design can detect. The current difference intervals are about 1.8 Sharpe points wide; shrinking them to about ±0.3 would take roughly ten times more data, so extra years alone cannot fix it.
-- **Breadth:** more independent bets raise the signal-to-noise ratio. The 400-stock run is a first step, but it needs the cost work above to be trusted.
-- **More seeds:** go from 3 to 10–20 seeds per model and report the spread. This reduces training noise, though not the noise from a short test period.
-- **More history:** extend the sample backward where membership and price data allow, and add 2026 as it completes.
+- **More realistic costs:**
+  - spreads estimated from daily highs and lows (Corwin–Schultz);
+  - square-root market impact, cost ≈ k · σ · √(trade / ADV), for $10M and $100M books;
+  - execution at the next open;
+  - training on the per-stock spread cost, which stays differentiable. The dashboard's exact cost slider would then cover the linear spread part only.
+- **More statistical power:**
+  - 10–20 seeds per model, which cuts training noise but not test-period noise;
+  - a broader universe once costs are realistic;
+  - more history, backward where the data allows and forward to 2026.
+
+  Shrinking the difference intervals from about ±0.9 to ±0.3 would need roughly ten times more data, so more years alone cannot settle the question.
+- **Richer inputs:** volume, volatility, earnings dates and news, plus attention across stocks rather than only across days.
+- **Survivorship-free data** such as CRSP.
 
 ## Limitations
 
-- **Survivorship bias remains.** Yahoo has no prices for 250 of the 884 historical members, mostly delisted or acquired companies. Coverage rises from 67% of index members in 2008 to 98% in 2025, so results are likely biased upward.
-- **Some tickers are reused.** A few delisted symbols (e.g. `CPWR`) now belong to unrelated securities on Yahoo. The price and liquidity filters keep all of them out of the tradable universe; [notebook 01](notebooks/01_data_exploration.ipynb) shows the check.
-- **Simplified execution.** Trades happen at the closing price, costs are a flat proportional rate with no market impact, short positions pay no borrow fee, and weights don't drift between daily rebalances. A flat 5 bps is especially optimistic for the less liquid names in the 400-stock run.
-- **Simplified relative to Avellaneda–Lee.** PCA factors are refit monthly rather than daily, and the s-score has no drift adjustment.
-- **Short samples.** Phase 2 compares strategies on two validation years and Phase 3 on four test years. At this length, Sharpe ratios within about one point of each other can't be told apart statistically.
-- **Few seeds.** Each network is trained with 3 seeds, so one failed seed in one year moves the combined result noticeably.
+- **Survivorship bias remains.** Yahoo has no prices for 250 of the 884 historical members, mostly delisted or acquired companies. Coverage rises from 67% of members in 2008 to 98% in 2025, so results are likely biased upward.
+- **Simplified execution.**
+  - Trades happen at the close.
+  - Costs are a flat proportional rate, with no impact and no borrow fees.
+  - Weights don't drift between daily rebalances.
+
+  A flat 5 bps is especially optimistic for the 400-stock run.
+- **Simplified relative to Avellaneda–Lee.** PCA is refit monthly rather than daily, and the s-score has no drift adjustment.
+- **Short samples.** With four test years, Sharpe ratios within about one point of each other can't be told apart.
+- **Few seeds.** With 3 seeds per model, one failed seed in one year moves the combined result noticeably.
+- **Reused tickers.** A few delisted symbols now belong to unrelated securities on Yahoo. The price and liquidity filters keep them out ([notebook 01](notebooks/01_data_exploration.ipynb) shows the check).
 
 ## References
 
 - Avellaneda & Lee (2010), *Statistical Arbitrage in the U.S. Equities Market*
 - Guijarro-Ordonez, Pelger & Zanotti (2021), *Deep Learning Statistical Arbitrage* ([arXiv:2106.04028](https://arxiv.org/abs/2106.04028))
-- Bailey & López de Prado (2014), *The Deflated Sharpe Ratio*
+- Bailey & López de Prado (2012, 2014), *The Sharpe Ratio Efficient Frontier* and *The Deflated Sharpe Ratio*
+- Politis & Romano (1994), *The Stationary Bootstrap*
 
-*Research and educational project; not investment advice.*
+## License
+
+Released under the [MIT License](LICENSE). This is a research and educational project, not investment advice.
