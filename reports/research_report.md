@@ -215,6 +215,33 @@ request; see the amendment's deviation note.)
   (gradient boosting +1.43) while the reversion-style models did not, but at 65–100% daily turnover it was
   untradeable.
 
+## 9b. Robustness: a 400-stock universe
+
+Pre-registered in `docs/robustness_universe_400.md` before any result existed. The study was rerun on the
+400 most liquid point-in-time stocks each day, with every hyperparameter frozen from the 150-stock tuning,
+the same folds and seeds, and the same DSR trial counts. The networks were retrained. The 150-stock results
+remain primary.
+
+| Net Sharpe | 150, 5 bps | 400, 5 bps | 150, 10 bps | 400, 10 bps | 400, 2024–25, 5 bps |
+|---|---|---|---|---|---|
+| OU | +0.15 | −0.04 | −0.65 | −0.90 | −0.79 |
+| Ridge | −0.32 | −0.64 | −1.34 | −2.25 | −1.81 |
+| Gradient boosting | −1.77 | −1.14 | −4.37 | −3.33 | −2.78 |
+| MLP | +0.16 | +0.40 | −0.23 | +0.07 | −0.95 |
+| Temporal CNN | −0.12 | +0.20 | −0.58 | −0.17 | −1.44 |
+| Transformer | +0.17 | +0.39 | −0.16 | +0.09 | −0.83 |
+
+- **The verdict is unchanged: no reliable edge after costs.** The Transformer has PSR 0.79, DSR 0.40, and a
+  difference with OU of +0.43 (95% CI −0.31 to +1.31).
+- **The wider universe helps the low-turnover models.** Gross Sharpe rises for every learned model, while
+  OU's falls from 0.94 to 0.82. Only the networks, trading 17–20% of the book a day, keep the gain after
+  costs. Rule 4 holds again: the Transformer beats gradient boosting by +1.53 (95% CI +0.77 to +3.08). It now
+  also beats ridge on 2020–2023, by +1.03 (95% CI +0.37 to +2.05).
+- **The holdout advantage over OU does not replicate.** In 2024–25 the networks lost about as much as OU
+  (Transformer −0.83 vs OU −0.79), and their gross Sharpe was negative while OU's was not.
+- **Costs are understated.** A flat 5 bps is optimistic for stocks ranked 150–400 by liquidity, so 10 bps
+  is the fairer comparison. There, every strategy is within 0.1 of zero or below it.
+
 ## 10. Limitations
 
 - Survivorship bias from free data; results are likely flattered, especially early in the sample.

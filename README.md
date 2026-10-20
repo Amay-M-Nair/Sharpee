@@ -2,7 +2,7 @@
 
 A research framework that compares a classical mean-reversion strategy with neural trading models and non-neural machine-learning baselines on US equities. The neural models are trained to maximize the **portfolio's Sharpe ratio after transaction costs**, not to forecast prices; the ridge and gradient-boosting baselines forecast, as standard machine learning would. Everything is evaluated walk-forward, with no look-ahead.
 
-> **Status: research complete (Phases 1-3), dashboard and report built (Phase 4a).** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, a pre-registered test on the sealed 2020–2023 years, a one-shot 2024–25 holdout, ridge and gradient-boosting baselines, an interactive dashboard and a [research report](reports/research_report.md). Live paper trading with GitHub Actions and MLflow tracking come next (Phase 4b).
+> **Status: research complete (Phases 1-3), dashboard and report built (Phase 4a).** Data pipeline, factor residuals, OU baseline, backtester, three neural models trained on Sharpe after costs, a pre-registered test on the sealed 2020–2023 years, a one-shot 2024–25 holdout, ridge and gradient-boosting baselines, a 400-stock robustness check, an interactive dashboard and a [research report](reports/research_report.md). Live paper trading with GitHub Actions and MLflow tracking come next (Phase 4b).
 
 **Built with:** Python, PyTorch, scikit-learn, NumPy, pandas, SciPy, Streamlit, Plotly, pytest, Jupyter.
 
@@ -12,13 +12,14 @@ A research framework that compares a classical mean-reversion strategy with neur
 
 | | Result |
 |---|---|
-| **Universe** | The 150 most liquid point-in-time S&P 500 stocks each day, 2010–2025 |
+| **Universe** | The 150 most liquid point-in-time S&P 500 stocks each day, 2010–2025 (primary); 400 as a robustness check |
 | **Classic baseline (OU)**, test years 2020–2023 | Sharpe 0.94 before costs, 0.15 after 5 bps costs |
 | **Best neural model (Transformer)**, validation 2018–2019 | Net Sharpe +0.21 vs. OU's −0.35, with a third less trading |
 | **Pre-registered test, 2020–2023** | No reliable edge after costs: Transformer +0.17 vs. OU +0.15 net Sharpe, not statistically distinguishable |
 | **One-shot holdout, 2024–2025** | Every strategy lost as residual reversion broke down; the learned models lost far less (Transformer −0.55 vs. OU −1.65) |
 | **What held up** | Training on costs beat the same model without them in every seed; the learned models degrade about half as fast as OU with higher costs or a one-day delay |
 | **Versus non-neural ML** | Gradient boosting and ridge, which forecast then trade, find as much raw signal but lose it to turnover; the Transformer beats gradient boosting on both periods |
+| **Robustness: 400 stocks** | Same verdict, no reliable edge after costs. The networks did better (Transformer +0.39, MLP +0.40 vs OU −0.04 net on 2020–2023), but not significantly, and lost about as much as OU in 2024–2025 |
 | **Market exposure** | Beta ≈ 0 for every strategy |
 | **Correctness** | 71 tests, a look-ahead test and a synthetic sanity check; 3 bugs caught and fixed |
 
@@ -163,9 +164,32 @@ Matching OU doesn't show how the networks compare with standard machine learning
 
 Full details: [findings write-up](reports/README.md#21-amendment-non-neural-baselines-the-objective-beats-forecast-then-trade), [Phase 3 sections](reports/README.md#phase-3-the-sealed-test-years-2020-2023) and [notebook 04](notebooks/04_results.ipynb).
 
+### Robustness check: a 400-stock universe
+
+Do the conclusions survive a wider, less liquid universe? The check was pre-registered in [`docs/robustness_universe_400.md`](docs/robustness_universe_400.md) before any 400-stock result existed. It uses the 400 most liquid stocks each day, chosen point-in-time exactly as before, with delisted names kept. Every hyperparameter stays frozen from the 150-stock tuning, and the networks are retrained with the same folds and seeds. The 150-stock results above remain the primary findings.
+
+| Net Sharpe | 150 stocks, 5 bps | **400 stocks, 5 bps** | 150 stocks, 10 bps | **400 stocks, 10 bps** | 400 stocks, 2024–25, 5 bps |
+|---|---|---|---|---|---|
+| OU | +0.15 | **−0.04** | −0.65 | **−0.90** | −0.79 |
+| Ridge | −0.32 | **−0.64** | −1.34 | **−2.25** | −1.81 |
+| Gradient boosting | −1.77 | **−1.14** | −4.37 | **−3.33** | −2.78 |
+| MLP | +0.16 | **+0.40** | −0.23 | **+0.07** | −0.95 |
+| Temporal CNN | −0.12 | **+0.20** | −0.58 | **−0.17** | −1.44 |
+| **Transformer** | +0.17 | **+0.39** | −0.16 | **+0.09** | −0.83 |
+
+2020–2023 unless marked. Neural models are 3 seeds combined.
+
+- **The verdict holds: no reliable edge after costs.** The Transformer's PSR is 0.79, its DSR is 0.40, and its edge over OU is +0.43 with a 95% interval of −0.31 to +1.31. All three rules fail again, as pre-registered.
+- **The networks gained from the wider universe and the others did not.** The extra names raise gross Sharpe for every learned model (Transformer 0.51 → 0.70, gradient boosting 0.84 → 1.05), while OU's falls (0.94 → 0.82). The networks trade only 17–20% of the book per day and keep most of the gain. OU (31%), ridge (86%) and gradient boosting (107%) trade more, and costs take more than the extra signal adds.
+- **Beats gradient boosting (rule 4): yes again.** The margin is +1.53 on 2020–2023 (95% CI +0.77 to +3.08) and +1.95 on the holdout. Against ridge, the Transformer now also wins on 2020–2023: +1.03 (95% CI +0.37 to +2.05).
+- **The holdout is weaker for the networks.** In 2024–25 they lost about as much as OU (Transformer −0.83 vs OU −0.79), unlike the clear advantage at 150 stocks. OU and the forecasting baselines still had a positive gross signal there, while the networks did not.
+- **Costs are optimistic.** A flat 5 bps understates trading costs for stocks ranked 150–400 by liquidity, so the 10 bps column is the more realistic one. At 10 bps, only the MLP and Transformer stay above zero, and only just.
+
+The interactive dashboard shows this 400-stock run. Results are in [`reports/n400/phase3/`](reports/n400/phase3/).
+
 ## Interactive dashboard
 
-A dark-themed Streamlit app with a top navigation bar lets anyone explore the results without running the research. A control strip under the bar switches between the 2020–2023 test years and the 2024–2025 holdout and sets the trading cost for every page:
+A dark-themed Streamlit app with a top navigation bar lets anyone explore the results without running the research. It shows the **400-stock run**; the primary 150-stock results are the tables above. A control strip under the bar switches between the 2020–2023 test years and the 2024–2025 holdout and sets the trading cost for every page:
 
 - **Overview:** the pre-registered verdict, headline numbers and confidence intervals.
 - **Strategies:** equity, drawdown, Sharpe vs cost and by year, and a one-day execution-delay toggle. The **cost slider** recomputes every number exactly (costs are linear in traded notional).
@@ -215,6 +239,8 @@ python scripts/export_dashboard.py                       # small result files fo
 streamlit run app/dashboard.py
 pytest
 ```
+
+For the 400-stock robustness run, set `SHARPEE_VARIANT=n400` before `walk_forward.py`, `train_tabular.py --walk-forward`, `run_backtest.py` and `export_dashboard.py`. They then read and write `runs/n400/` and `reports/n400/`, using the frozen 150-stock settings copied into `runs/n400/`.
 
 The notebooks run top to bottom with the project's environment, e.g. `python -m nbconvert --to notebook --execute --inplace notebooks/04_results.ipynb`.
 
