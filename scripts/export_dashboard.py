@@ -1,4 +1,4 @@
-"""Export the small files the dashboard reads into reports/dashboard/.
+"""Export the small files the dashboard reads into <reports_dir>/dashboard/ (reports/n400/dashboard for the app).
 
     python scripts/export_dashboard.py                  # everything
     python scripts/export_dashboard.py --only attention # one part

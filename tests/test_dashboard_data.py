@@ -25,7 +25,7 @@ def test_net_returns_are_linear_in_cost():
 def test_signals_cover_the_universe():
     signals = dd.load_signals("test")
     per_day = signals.groupby("date").size()
-    assert per_day.max() <= 150 and per_day.median() >= 140
+    assert per_day.max() <= 400 and per_day.median() >= 380
     assert set(signals["ou"].dropna().unique()) <= {-1.0, 0.0, 1.0}
 
 

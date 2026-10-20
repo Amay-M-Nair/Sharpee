@@ -10,8 +10,9 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
-DASH = ROOT / "reports" / "dashboard"
-PHASE3 = ROOT / "reports" / "phase3"
+# The dashboard shows the 400-stock run (docs/robustness_universe_400.md); the 150-stock results are in the README
+DASH = ROOT / "reports" / "n400" / "dashboard"
+PHASE3 = ROOT / "reports" / "n400" / "phase3"
 FIGURES = ROOT / "reports" / "figures"
 PERIODS_PER_YEAR = 252
 

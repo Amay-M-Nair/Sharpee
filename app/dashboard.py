@@ -84,7 +84,8 @@ def lines(series: dict, title: str, yaxis: str = "", hline=None, percent=False, 
 def overview():
     st.markdown("### Can deep learning beat a classic stat-arb rule after costs?")
     st.markdown(
-        "Sharpee removes market and sector moves from S&P 500 stocks with rolling PCA, then bets that what is "
+        "Sharpee removes market and sector moves from the 400 most liquid S&P 500 stocks each day (chosen "
+        "point-in-time, delisted names included) with rolling PCA, then bets that what is "
         "left (the residual) snaps back. A classic **Ornstein–Uhlenbeck (OU)** rule is compared with an MLP, a "
         "temporal CNN and a Transformer trained to maximize the **portfolio's Sharpe ratio after trading "
         "costs**, and with ridge and gradient-boosting baselines that forecast and then trade. Every portfolio "
@@ -127,16 +128,18 @@ def overview():
 
     st.markdown("#### What held up")
     st.markdown(
-        "- **Costs inside the training loss work.** The same Transformer trained without costs did worse in all "
-        "3 seeds on 2020–2023 (+0.17 vs −0.08 net) and traded about 50% more.\n"
-        "- **Training on after-cost Sharpe beats forecasting.** Gradient boosting trades about 100% of the book "
-        "per day and loses −1.77 net on 2020–2023, despite a gross Sharpe of 0.84.\n"
-        "- **The learned models are more robust.** OU has the strongest raw signal but needs cheap, immediate "
-        "execution: move the cost slider, or turn on the one-day delay in *Strategies*.\n"
-        "- **When the signal broke down in 2024–2025**, every strategy lost money, but the learned models lost "
-        "about a third as much as OU (switch the period above).\n"
+        "- **Training on after-cost Sharpe beats forecasting.** Gradient boosting has the highest gross Sharpe "
+        "on 2020–2023 (1.05) but trades about 100% of the book per day and ends at −1.14 net; the Transformer "
+        "trades about 17% and ends at +0.39.\n"
+        "- **The networks hold up better than OU** when costs rise or execution is a day late: move the cost "
+        "slider, or turn on the one-day delay in *Strategies*. At 10 bps only the MLP and Transformer stay above "
+        "zero, and only just.\n"
+        "- **When the signal broke down in 2024–2025**, every strategy lost money and the networks did no better "
+        "than OU (switch the period above).\n"
         "- **The networks learned a rule OU can't express:** revert moderate residual moves, follow extreme "
-        "ones (see *Signal*).")
+        "ones (see *Signal*).\n"
+        "- **Same verdict on 150 stocks**, the pre-registered primary universe; its results, and the ablation "
+        "of costs in the training loss, are in the README.")
 
 
 def explorer():
@@ -217,7 +220,7 @@ def signal():
     st.caption("Dashed lines: OU enters a long below −1.25 or a short above +1.25. Dotted lines: it exits a "
                "long above −0.5 and a short below +0.75. Model scores are standardized across stocks each "
                "day and averaged over the 3 seeds; above 0 means the model leans long. Gaps are days the "
-               "stock was outside the 150-stock universe.")
+               "stock was outside the 400-stock universe.")
 
     left, right = st.columns(2)
     with left:
@@ -285,7 +288,9 @@ def integrity():
         st.caption("Same architecture, settings, seeds and folds; the only change is whether the 5 bps cost is "
                    "inside the training loss. On 2020–2023 the cost-trained version was better in every seed.")
     else:
-        st.caption("The ablation was run on the test years only; switch the period to 2020–2023.")
+        st.caption("This ablation was run on the 150-stock universe only: trained without costs, the "
+                   "Transformer did worse in all 3 seeds on 2020–2023 (−0.08 vs +0.17 net) and traded about "
+                   "50% more. See the README.")
 
     comp = dd.load_neural_vs_baselines(period)
     if comp is not None:
