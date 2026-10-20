@@ -1,6 +1,6 @@
 # Findings: the evidence behind Sharpee's design
 
-Each figure below comes from the notebooks ([01 data exploration](../notebooks/01_data_exploration.ipynb), [02 residual analysis](../notebooks/02_residual_analysis.ipynb), [03 model training](../notebooks/03_train_models.ipynb), [04 results](../notebooks/04_results.ipynb)) or from `scripts/run_baseline.py`, and rerunning them regenerates it. Every section covers what the data shows and which design decision it justifies. Sections 1-10 are Phase 1 (data and baseline), sections 11-14 are Phase 2 (neural models), sections 15-20 are Phase 3 (the sealed test years and the holdout), and section 21 is the amendment that adds non-neural baselines.
+Each figure below comes from the notebooks ([01 data exploration](../notebooks/01_data_exploration.ipynb), [02 residual analysis](../notebooks/02_residual_analysis.ipynb), [03 model training](../notebooks/03_train_models.ipynb), [04 results](../notebooks/04_results.ipynb)) or from `scripts/run_baseline.py`, and rerunning them regenerates it. Every section covers what the data shows and which design decision it justifies. Sections 1-10 are Phase 1 (data and baseline), sections 11-14 are Phase 2 (neural models), sections 15-20 are Phase 3 (the sealed test years and the holdout), section 21 is the amendment that adds non-neural baselines, and sections 22-24 are the robustness checks (a 400-stock universe, a power analysis and realistic costs).
 
 ---
 
@@ -300,3 +300,77 @@ The rules were fixed in [`docs/phase3_protocol.md`](../docs/phase3_protocol.md) 
 - **A holdout caveat.** In 2024–2025 the forecasting models kept a positive gross signal (gradient boosting +1.43, ridge +0.88) while every reversion-style model went negative even before costs. Forecasting the next-day payoff lets a model pick up whatever predicts it, including the continuation 2024 rewarded; at 65–100% daily turnover it was untradeable.
 
 **Design decision this supports.** The project's central choice, training on the portfolio's Sharpe ratio *after costs*, is what turns a real but costly signal into a tradeable one. Without a control trained on the same loss, this comparison can't say how much the neural architecture itself adds.
+
+---
+
+# Robustness checks
+
+Each check below was pre-registered before its results existed, and none of them replaces the primary 150-stock, flat-5-bps findings above.
+
+---
+
+## 22. A 400-stock universe: the same verdict, a bigger gap for the networks
+
+**Why it was run.** Breadth gives more independent bets, so a wider universe should make any real edge easier to see. The check ([`docs/robustness_universe_400.md`](../docs/robustness_universe_400.md)) uses the 400 most liquid point-in-time stocks each day. It keeps every hyperparameter frozen from the 150-stock tuning and retrains only the networks.
+
+| Net Sharpe, 5 bps | OU | Ridge | Gradient boosting | MLP | Temporal CNN | Transformer |
+|---|---|---|---|---|---|---|
+| 2020–2023, 150 stocks | +0.15 | −0.32 | −1.77 | +0.16 | −0.12 | +0.17 |
+| 2020–2023, 400 stocks | −0.04 | −0.64 | −1.14 | +0.40 | +0.20 | +0.39 |
+| 2024–2025, 400 stocks | −0.79 | −1.81 | −2.78 | −0.95 | −1.44 | −0.83 |
+
+**What it shows.**
+- **The verdict is unchanged.** The Transformer's PSR is 0.79, its DSR 0.40, and its edge over OU is +0.43 (95% CI −0.31 to +1.31).
+- **Breadth helps the low-turnover models only.** Gross Sharpe rises for every learned model (Transformer 0.51 → 0.70) and falls for OU (0.94 → 0.82). The networks, trading 17–20% of the book a day, keep the gain after costs; the others do not.
+- **The 150-stock holdout advantage does not replicate.** In 2024–2025 the networks lost about as much as OU.
+
+**Design decision this supports.** The dashboard shows this wider run, decided before its results existed, while the 150-stock results stay primary. Its weakness, flat costs on less liquid names, is what section 24 addresses.
+
+---
+
+## 23. Power analysis: what the test could have detected
+
+**Why it was run.** "Not significant" only means something once you know how large an effect the test could have found. The minimum detectable effect (MDE) is the smallest true effect detected 80% of the time. It's computed from the same stationary-bootstrap standard errors as the intervals, so it accounts for fat tails, serial correlation and the correlation between strategies ([`scripts/power_analysis.py`](../scripts/power_analysis.py)).
+
+| 2020–2023, net 5 bps | Observed (150 / 400 stocks) | MDE at 80% power | Years needed for the observed effect |
+|---|---|---|---|
+| Transformer Sharpe vs 0 | +0.17 / +0.39 | 1.16–1.25 | ~180 / ~40 |
+| Transformer minus OU | +0.03 / +0.43 | 1.16–1.31 | ~10,000 / ~29 |
+| Transformer minus gradient boosting | +1.94 / +1.53 | 1.74–2.19 | ~5 |
+| Transformer minus MLP | +0.02 / −0.01 | 0.28–0.49 | thousands |
+
+**What it shows.**
+- **Four years can only reliably detect a Sharpe of about 1.2,** far above realistic after-cost stat-arb edges. The failed rules mean "too small to see," not "zero."
+- **More years barely help.** The standard error shrinks with the square root of the sample, so even the 400-stock gap over OU would need about 29 years.
+- **The networks can be compared with each other precisely.** They are 95–98% correlated day to day, so their MDE is 0.3–0.5, yet the Transformer and MLP are still indistinguishable.
+- **It explains rule 4.** The gradient-boosting gap is the only effect near the MDE, and the only rule that passed.
+
+**Design decision this supports.** The verdict is worded "no *reliable* edge," and the next gains in power would come from breadth and realistic costs rather than more history.
+
+---
+
+## 24. Realistic costs: liquidity decides, the verdict stands
+
+**Why it was run.** A flat 5 bps charges the same for every stock and ignores borrowing, although every short, including the hedge legs, has to be borrowed. The check ([`docs/realistic_costs.md`](../docs/realistic_costs.md)) rescores the saved scores, with nothing retrained, under two costs:
+
+- a spread set by each stock's daily liquidity rank among index members, using trailing 20-day median dollar volume: 3, 5, 7 or 10 bps per unit traded;
+- a 0.5% a year borrow fee on short notional.
+
+A stress case doubles the tiers and charges 2% to borrow.
+
+| Net Sharpe, 2020–2023 | 150: flat | 150: realistic | 150: stress | 400: flat | 400: realistic | 400: stress |
+|---|---|---|---|---|---|---|
+| OU | +0.15 | +0.31 | −0.43 | −0.04 | −0.32 | −1.57 |
+| Gradient boosting | −1.77 | −1.13 | −3.19 | −1.14 | −1.73 | −4.60 |
+| MLP | +0.16 | +0.22 | −0.19 | +0.40 | +0.28 | −0.25 |
+| Transformer | +0.17 | +0.22 | −0.14 | +0.39 | +0.28 | −0.21 |
+| Average spread paid | 5.0 bps | 3.7 bps | 7.4 bps | 5.0 bps | 6.3 bps | 12.6 bps |
+
+**What it shows.**
+- **The verdict holds** in both universes and both periods.
+- **Liquidity drives the change.** The 150 most liquid names are cheaper than 5 bps, so every strategy improves and OU edges past the Transformer, within the noise. The 400-stock names are dearer, so every strategy falls, the high-turnover ones most. The networks stay the only positive strategies there.
+- **Borrow fees are minor and even-handed.** Every book is about half short, so 0.5% a year costs about 0.2–0.25% of return a year.
+- **Stress costs remove every positive result.**
+- **One rule changes.** Rule 4 fails on the 150-stock holdout (+0.79, 95% CI −0.56 to +2.00), because cheaper costs on liquid names help the high-turnover baseline most.
+
+**Design decision this supports.** Costs, not model capacity, are the binding constraint: the conclusions survive realistic costs, but any edge sits close enough to zero that the cost model matters as much as the model. Training on per-stock costs and adding market impact are the natural next steps.
