@@ -2,10 +2,14 @@
 
     python scripts/run_backtest.py              # 2020-2023, from runs/walkforward/test
     python scripts/run_backtest.py --holdout    # 2024-2025, run once at the very end
+    python scripts/run_backtest.py --costs realistic [--holdout]   # spread tiers + borrow fees
 
 Rules, metrics and seed handling follow docs/phase3_protocol.md: each neural
 model's seeds are combined with one third of capital in each seed's book, and
-the Transformer is the primary candidate. Writes reports/phase3/<period>_*.
+the Transformer is the primary candidate. Writes reports/phase3/<period>_*, or
+reports/phase3/realistic/<period>_* with --costs realistic, which rescores the
+same saved scores under per-stock spread tiers and borrow fees
+(docs/realistic_costs.md); nothing is retrained.
 """
 
 import argparse
@@ -14,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from sharpee.backtest.engine import run_backtest
+from sharpee.backtest.realistic import spread_matrix
 from sharpee.config import load_config, repo_path
 from sharpee.evaluation.metrics import summarize
 from sharpee.evaluation.significance import (daily_sharpe, dsr, paired_sharpe_difference, psr,
@@ -28,6 +33,7 @@ PRIMARY = "transformer"
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--holdout", action="store_true")
+    ap.add_argument("--costs", choices=["flat", "realistic"], default="flat")
     args = ap.parse_args()
     cfg = load_config("data", "experiment")
     runs = runs_dir(cfg)
@@ -39,6 +45,22 @@ def main():
     panel = load_panel(cfg)
     idx = panel.index_of(f"{years[0]}-01-01", f"{years[-1]}-12-31")
     scores = strategy_scores(panel, runs, period, idx)
+
+    # cost settings as (label, backtest arguments); the rules use the primary label
+    if args.costs == "flat":
+        cost_key, primary = "cost_bps", cfg["cost_bps"]
+        settings = [(c, {"cost_bps": c}) for c in cfg["cost_grid"]]
+        cost_text = f"{cfg['cost_bps']:g} bps"
+    else:
+        rc = cfg["realistic_costs"]
+        cost_key, primary = "scenario", rc["primary"]
+        spread = spread_matrix(panel, cfg)
+        settings = [(name, {"spread": spread * s["spread_mult"], "borrow_rate": s["borrow_rate"]})
+                    for name, s in rc["scenarios"].items()]
+        s = rc["scenarios"][primary]
+        cost_text = f"{primary} costs (spread tiers x{s['spread_mult']:g}, {s['borrow_rate']:.1%} a year borrow)"
+        out = out / "realistic"
+        out.mkdir(parents=True, exist_ok=True)
     print(f"{period} {panel.dates[idx[0]].date()}..{panel.dates[idx[-1]].date()} ({len(idx)} days): "
           f"{', '.join(scores)}")
 
@@ -53,13 +75,16 @@ def main():
     summary, per_seed, per_year, daily = [], [], [], {}
     for name, seeds in scores.items():
         center = name != "ou"
-        for cost in cfg["cost_grid"]:
+        for label, kw in settings:
             for delay in (0, 1):
-                frames = [run_backtest(panel, idx, s, cost_bps=cost, delay=delay, cap=cfg["cap"], center=center)
+                frames = [run_backtest(panel, idx, s, delay=delay, cap=cfg["cap"], center=center, **kw)
                           for _, s in seeds]
                 book = combined(frames)
-                summary.append({"strategy": name, "cost_bps": cost, "delay": delay, **summarize(book)})
-                if cost == cfg["cost_bps"] and delay == 0:
+                summary.append({"strategy": name, cost_key: label, "delay": delay, **summarize(book),
+                                "spread_drag": book["spread_cost"].mean() * 252,
+                                "borrow_drag": book["borrow_cost"].mean() * 252,
+                                "effective_bps": book["spread_cost"].sum() / book["turnover"].sum() * 1e4})
+                if label == primary and delay == 0:
                     for (seed, _), f in zip(seeds, frames):
                         per_seed.append({"strategy": name, "seed": seed, **summarize(f)})
                     for year, g in book.groupby(book.index.year):
@@ -87,10 +112,10 @@ def main():
     pd.concat({k: v for k, v in daily.items()}, axis=1).to_parquet(out / f"{period}_daily.parquet")
 
     view = pd.DataFrame(summary)
-    view = view[(view.cost_bps == cfg["cost_bps"]) & (view.delay == 0)].set_index("strategy")
-    print("\nnet of 5 bps, seeds combined")
-    print(view[["ann_return", "ann_vol", "sharpe", "gross_sharpe", "max_drawdown", "avg_turnover", "beta"]]
-          .round(3).to_string())
+    view = view[(view[cost_key] == primary) & (view.delay == 0)].set_index("strategy")
+    print(f"\nnet of {cost_text}, seeds combined")
+    print(view[["sharpe", "gross_sharpe", "avg_turnover", "effective_bps", "spread_drag", "borrow_drag",
+                "max_drawdown", "beta"]].round(3).to_string())
     print("\nsignificance")
     print(sig.set_index("strategy").round(3).to_string())
 
@@ -109,7 +134,7 @@ def main():
             verdict = "no reliable edge after costs"
         lines = [
             f"# Phase 3 verdict ({period}, {years[0]}-{years[-1]})", "",
-            f"Primary candidate: Transformer, seeds combined, net of {cfg['cost_bps']:g} bps.", "",
+            f"Primary candidate: Transformer, seeds combined, net of {cost_text}.", "",
             f"- Net Sharpe {p['net_sharpe']:+.2f} (95% CI {p['ci_low']:+.2f} to {p['ci_high']:+.2f})",
             f"- Rule 1, PSR = {p['psr']:.3f} (needs >= 0.95): {'pass' if rule1 else 'fail'}",
             f"- Rule 2, DSR = {p['dsr']:.3f} with N = {n_trials} (needs >= 0.95): {'pass' if rule2 else 'fail'}",
@@ -130,7 +155,7 @@ def main():
         comp = pd.DataFrame(rows).set_index("baseline")
         comp.to_csv(out / f"{period}_neural_vs_baselines.csv")
         lines = [f"# Amendment: does the neural part matter? ({period}, {years[0]}-{years[-1]})", "",
-                 f"Sharpe(Transformer) minus Sharpe(baseline), net of {cfg['cost_bps']:g} bps, paired 95% interval.",
+                 f"Sharpe(Transformer) minus Sharpe(baseline), net of {cost_text}, paired 95% interval.",
                  ""]
         for rule, base_name, label in [(4, "gbm", "gradient boosting")]:
             if base_name in comp.index:
@@ -143,7 +168,7 @@ def main():
                          f"{c['ci_high']:+.2f})")
         (out / f"{period}_amendment.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
         print("\n" + "\n".join(lines))
-    print(f"\nwrote reports/phase3/{period}_*")
+    print(f"\nwrote {out}/{period}_*")
 
 
 if __name__ == "__main__":

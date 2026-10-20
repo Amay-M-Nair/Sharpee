@@ -10,7 +10,8 @@ from ..strategies.ou_strategy import ou_positions
 STRATEGIES = ["ou", "ridge", "gbm", "mlp", "temporal_cnn", "transformer", "transformer_nocost"]
 DETERMINISTIC = {"ridge", "gbm"}   # fitted once per fold, saved as seed 0
 AMENDMENT = {"ridge", "gbm"}   # added by docs/phase3_amendment_baselines.md
-COLUMNS = ["gross", "cost", "net", "turnover", "market", "net_exposure", "gross_exposure"]
+COLUMNS = ["gross", "cost", "net", "spread_cost", "borrow_cost", "turnover", "market", "net_exposure",
+           "gross_exposure", "short_exposure"]
 
 
 def strategy_scores(panel, runs, period: str, idx: np.ndarray) -> dict:

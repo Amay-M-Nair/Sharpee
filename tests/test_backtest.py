@@ -4,6 +4,7 @@ import torch
 
 from sharpee.backtest.costs import portfolio_returns, turnover
 from sharpee.backtest.engine import run_backtest, weights_for
+from sharpee.backtest.realistic import holding_costs, spread_from_rank
 from sharpee.evaluation.walk_forward import make_fold, make_folds, split
 
 
@@ -59,3 +60,31 @@ def test_folds_are_ordered_with_embargo(panel):
     small.test = (str(d[350].date()), str(d[-1].date()))
     tr, va, te = split(panel, small, embargo=30)
     assert tr[-1] == 150 - 30 and va[-1] == 300 - 30 and te[0] == 350
+
+
+def test_spread_tiers_hand_values():
+    rank = np.array([[1, 100, 101, 250, 301, np.nan]])
+    cost = spread_from_rank(rank, [(100, 3.0), (200, 5.0), (300, 7.0)], 10.0)
+    assert np.allclose(cost, np.array([[3, 3, 5, 7, 10, 10]]) * 1e-4)
+
+
+def test_holding_costs_hand_example():
+    """Spread is charged per stock on |dx|; borrow on short notional, hedge legs included."""
+    x = np.array([[0.5, -0.3, -0.2], [0.2, -0.3, 0.1]])
+    spread = np.array([[0.0003, 0.0010, 0.0005]] * 2)
+    spread_cost, borrow_cost = holding_costs(x, spread, borrow_rate=0.0252)
+    # day 0 trades from flat: .5*3 + .3*10 + .2*5 = 5.5 bps; day 1: .3*3 + 0 + .3*5 = 2.4 bps
+    assert np.allclose(spread_cost, [5.5e-4, 2.4e-4])
+    # 2.52% / 252 = 1 bp a day per unit short: shorts 0.5 then 0.3
+    assert np.allclose(borrow_cost, [0.5e-4, 0.3e-4])
+
+
+def test_flat_spread_matches_flat_cost(panel):
+    idx = np.arange(100, 160)
+    scores = np.random.default_rng(0).normal(size=(len(idx), panel.n_slots)).astype(np.float32)
+    flat = run_backtest(panel, idx, scores, cost_bps=5)
+    spread = np.full((len(panel.dates), len(panel.tickers)), 5e-4, dtype=np.float32)
+    tiered = run_backtest(panel, idx, scores, spread=spread, borrow_rate=0.01)
+    assert np.allclose(flat["spread_cost"], tiered["spread_cost"], atol=1e-7)
+    assert np.allclose(tiered["borrow_cost"], 0.01 / 252 * -tiered["short_exposure"], atol=1e-9)
+    assert np.allclose(tiered["net"], tiered["gross"] - tiered["spread_cost"] - tiered["borrow_cost"])
