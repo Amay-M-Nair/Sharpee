@@ -104,6 +104,12 @@ def load_neural_vs_baselines(period: str) -> pd.DataFrame | None:
     return pd.read_csv(f).set_index("baseline") if f.exists() else None
 
 
+def load_power(period: str) -> pd.DataFrame:
+    """Minimum detectable effects at 80% power (scripts/power_analysis.py), net of 5 bps."""
+    power = pd.read_csv(PHASE3 / "power.csv")
+    return power[power["period"] == period].reset_index(drop=True)
+
+
 def load_verdict(period: str) -> str:
     return (PHASE3 / f"{period}_verdict.md").read_text(encoding="utf-8")
 

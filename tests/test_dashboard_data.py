@@ -44,3 +44,10 @@ def test_attention_is_a_distribution_over_the_window():
     att = dd.load_attention()
     assert len(att) == 30 and att.index.max() == 0
     assert abs(att["moderate"].sum() - 1) < 1e-3 and abs(att["extreme"].sum() - 1) < 1e-3
+
+
+def test_power_table_matches_significance():
+    power, sig = dd.load_power("test"), dd.load_significance("test")
+    row = power[(power["test"] == "Sharpe vs 0") & (power["strategy"] == "Transformer")].iloc[0]
+    assert np.isclose(row["observed"], sig.loc["transformer", "net_sharpe"], atol=1e-6)
+    assert (power["mde"] > 0).all()

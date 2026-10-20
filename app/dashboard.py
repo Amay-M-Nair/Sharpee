@@ -304,6 +304,41 @@ def integrity():
             "diff": "Transformer minus baseline", "ci_low": "95% CI low", "ci_high": "95% CI high"})
             .style.format("{:+.2f}"))
 
+    st.markdown("#### What could this test detect?")
+    pw = dd.load_power(period)
+    years = pw["years"].iloc[0]
+    label = pw["test"].str.replace("Transformer minus", "Transformer − ", regex=False)
+    label = (label.where(pw["test"] != "Sharpe vs 0", "") + pw["strategy"]
+             + np.where(pw["test"] == "Sharpe vs 0", " vs 0", ""))
+    fig = go.Figure([
+        go.Bar(y=label, x=2 * pw["mde"], base=-pw["mde"], orientation="h", name="Too small to detect reliably",
+               marker_color="rgba(110,118,129,0.35)", hovertemplate="±%{customdata:.2f}<extra></extra>",
+               customdata=pw["mde"]),
+        go.Scatter(y=label, x=pw["observed"], mode="markers", name="Observed",
+                   marker=dict(size=11, color=[dd.COLORS["transformer"] if t != "Sharpe vs 0"
+                                               else dd.COLORS[k] for t, k in
+                                               zip(pw["test"], pw["strategy"].map({v: k for k, v in dd.NAMES.items()}))],
+                               line=dict(width=1, color="#0D1117")),
+                   hovertemplate="%{x:+.2f}<extra></extra>")])
+    fig.add_vline(x=0, line_width=1, line_color=dd.REFERENCE)
+    fig.update_yaxes(autorange="reversed")
+    fig.update_layout(hovermode="closest")
+    finish(fig, f"Observed Sharpe and Sharpe differences vs what {years:.0f} years can detect (net of 5 bps)",
+           480, legend_below=True)
+    gap = pw[(pw["test"] != "Sharpe vs 0") & (pw["strategy"] == "OU")].iloc[0]
+    tr = pw[(pw["test"] == "Sharpe vs 0") & (pw["strategy"] == "Transformer")].iloc[0]
+    st.markdown(
+        f"The grey band is the **minimum detectable effect** at 80% power: with {years:.0f} years of data, a true "
+        f"effect inside it is more likely missed than found. The Transformer's Sharpe needs to be about "
+        f"**{tr['mde']:.2f}** to be reliably told apart from zero, and its gap with OU about **{gap['mde']:.2f}**; "
+        f"the observed values are {tr['observed']:+.2f} and {gap['observed']:+.2f}. So \"no reliable edge\" means "
+        "too small for this sample to see, not proven zero, and more years barely help, because the standard "
+        "error shrinks only with the square root of the sample length.")
+    st.caption("One-sided 5% test against zero (the PSR rule), two-sided 5% for differences (the paired-interval "
+               "rules). Standard errors come from the same stationary bootstrap as the confidence intervals. The "
+               "networks are 95–98% correlated with each other, which is why their mutual comparisons have much "
+               "narrower bands. Computed at the pre-registered 5 bps, so the cost slider doesn't change it.")
+
     st.markdown("#### What the checks caught")
     with st.expander("NaN training blocks"):
         st.markdown("Random cut points occasionally produced a 1-day training block, whose Sharpe is undefined, "
