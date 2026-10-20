@@ -5,9 +5,10 @@
 
 The hosted app has no price data, panel or models, only these files:
 
-    returns_<period>.parquet   per strategy and day: gross return and turnover, with and without a
-                               one-day execution delay, net exposure, and the market return. Costs are
-                               linear, so the app computes net = gross - cost * turnover for any cost.
+    returns_<period>.parquet   per strategy and day: gross return, turnover, tiered spread cost and
+                               short notional, with and without a one-day execution delay, net exposure,
+                               and the market return. Every cost is linear, so the app computes net returns
+                               exactly for any flat cost, spread-tier multiplier or borrow rate.
     signals_<period>.parquet   per stock and day: OU s-score, OU position, and each model's score
                                (standardized across stocks each day, averaged over the 3 seeds)
     trials.csv                 every Fold 1 configuration tried, with its validation Sharpe
@@ -23,6 +24,7 @@ import pandas as pd
 import torch
 
 from sharpee.backtest.engine import run_backtest
+from sharpee.backtest.realistic import spread_matrix
 from sharpee.config import load_config, repo_path
 from sharpee.evaluation.strategies import combined, strategy_scores
 from sharpee.evaluation.walk_forward import make_folds, split
@@ -41,17 +43,20 @@ def standardized(scores: np.ndarray, tradable: np.ndarray) -> np.ndarray:
     return (s - np.nanmean(s, axis=1, keepdims=True)) / np.nanstd(s, axis=1, keepdims=True)
 
 
-def export_period(panel, runs, cfg, period, years, out):
+def export_period(panel, runs, cfg, period, years, out, spread):
     idx = panel.index_of(f"{years[0]}-01-01", f"{years[-1]}-12-31")
     scores = strategy_scores(panel, runs, period, idx)
 
     cols = {}
     for name, seeds in scores.items():
         for delay in (0, 1):
-            book = combined([run_backtest(panel, idx, s, cost_bps=0, delay=delay, cap=cfg["cap"],
-                                          center=name != "ou") for _, s in seeds])
+            # tiered spreads at x1 and no borrow: spread_cost is the tier cost, short_exposure the short book
+            book = combined([run_backtest(panel, idx, s, delay=delay, cap=cfg["cap"], center=name != "ou",
+                                          spread=spread) for _, s in seeds])
             cols[(name, f"gross_d{delay}")] = book["gross"]
             cols[(name, f"turnover_d{delay}")] = book["turnover"]
+            cols[(name, f"spread_d{delay}")] = book["spread_cost"]
+            cols[(name, f"short_d{delay}")] = -book["short_exposure"]
             if delay == 0:
                 cols[(name, "net_exposure")] = book["net_exposure"]
                 cols[("market", "return")] = book["market"]
@@ -132,8 +137,9 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     panel = load_panel(cfg)
     if args.only in (None, "periods"):
-        export_period(panel, runs, cfg, "test", cfg["test_years"], out)
-        export_period(panel, runs, cfg, "holdout", cfg["holdout_years"], out)
+        spread = spread_matrix(panel, cfg)
+        export_period(panel, runs, cfg, "test", cfg["test_years"], out, spread)
+        export_period(panel, runs, cfg, "holdout", cfg["holdout_years"], out, spread)
     if args.only in (None, "trials"):
         export_trials(runs, out)
     if args.only in (None, "attention"):

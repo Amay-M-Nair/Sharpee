@@ -51,3 +51,11 @@ def test_power_table_matches_significance():
     row = power[(power["test"] == "Sharpe vs 0") & (power["strategy"] == "Transformer")].iloc[0]
     assert np.isclose(row["observed"], sig.loc["transformer", "net_sharpe"], atol=1e-6)
     assert (power["mde"] > 0).all()
+
+
+def test_realistic_costs_match_official_results():
+    """The app's linear realistic-cost formula reproduces the official realistic-cost backtest."""
+    returns, sig = dd.load_returns("test"), dd.load_significance("test", realistic=True)
+    for s in ("ou", "transformer"):
+        r = dd.net_returns(returns, s, dd.Costs(realistic=True))
+        assert np.isclose(dd.sharpe(r), sig.loc[s, "net_sharpe"], atol=0.01)

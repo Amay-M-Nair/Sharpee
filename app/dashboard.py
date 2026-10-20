@@ -34,8 +34,8 @@ def signals_for(period):
 
 
 @st.cache_data
-def significance_for(period):
-    return dd.load_significance(period)
+def significance_for(period, realistic=False):
+    return dd.load_significance(period, realistic)
 
 
 @st.cache_data
@@ -91,33 +91,40 @@ def overview():
         "costs**, and with ridge and gradient-boosting baselines that forecast and then trade. Every portfolio "
         "is factor-hedged, and the rules for judging the result were committed "
         "before the test years were opened.")
-    sig = significance_for(period)
+    official = cost.realistic and cost.spread_mult == 1 and cost.borrow == 0.005
+    sig = significance_for(period, official)
     st.warning(f"**Pre-registered verdict, {dd.PERIODS[period].lower()}: {dd.verdict_line(period)}.**",
                icon=":material/gavel:")
+    if cost.realistic:
+        st.info(f"**Under realistic costs: {dd.verdict_line(period, True)}.** Liquidity-tier spreads and a 0.5% "
+                "borrow fee, rescored from the same saved model scores "
+                f"([pre-registered]({REPO}/blob/main/docs/realistic_costs.md)).", icon=":material/payments:")
 
     table = dd.summary(returns, main, cost)
     c = st.columns(4)
-    c[0].metric(f"Transformer net Sharpe, {cost} bps", f"{table.loc['Transformer', 'net Sharpe']:+.2f}",
-                border=True)
-    c[1].metric(f"OU net Sharpe, {cost} bps", f"{table.loc['OU', 'net Sharpe']:+.2f}", border=True)
+    c[0].metric("Transformer net Sharpe", f"{table.loc['Transformer', 'net Sharpe']:+.2f}", border=True,
+                help=f"Net of {cost.label}.")
+    c[1].metric("OU net Sharpe", f"{table.loc['OU', 'net Sharpe']:+.2f}", border=True, help=f"Net of {cost.label}.")
     c[2].metric("PSR (needs 0.95)", f"{sig.loc['transformer', 'psr']:.2f}", border=True,
                 help="Probability that the Transformer's true Sharpe is above zero, at 5 bps, allowing for "
                      "fat tails and sample length.")
     c[3].metric("DSR (needs 0.95)", f"{sig.loc['transformer', 'dsr']:.2f}", border=True,
                 help="The same probability with the bar raised for the 15 configurations tried during tuning.")
 
-    table.insert(1, "95% CI at 5 bps",
+    table.insert(1, "95% CI at " + ("realistic" if official else "5 bps"),
                  [f"{sig.loc[s, 'ci_low']:+.2f} to {sig.loc[s, 'ci_high']:+.2f}" for s in main])
     st.dataframe(style(table))
-    st.caption(f"{dd.PERIODS[period]}, net of {cost} bps, neural models' 3 seeds combined. "
-               "Confidence intervals are stationary-bootstrap intervals at 5 bps.")
+    ci_basis = "realistic costs" if official else "5 bps"
+    st.caption(f"{dd.PERIODS[period]}, net of {cost.label}, neural models' 3 seeds combined. "
+               f"Confidence intervals, PSR and DSR are stationary-bootstrap and official values at {ci_basis}.")
 
-    comp = dd.load_neural_vs_baselines(period)
+    comp = dd.load_neural_vs_baselines(period, official)
     if comp is not None:
         st.markdown("#### Does the neural part matter?")
         st.markdown(
             "Added after the main study, with its own rules committed before running: non-neural baselines on "
-            "the same inputs, portfolio layer and costs. Transformer minus each baseline, net Sharpe at 5 bps, "
+            "the same inputs, portfolio layer and costs. Transformer minus each baseline, net Sharpe at "
+            f"{'realistic costs' if official else '5 bps'}, "
             "paired 95% interval:")
         st.markdown("\n".join(
             f"- **vs {dd.NAMES[b]}:** {r['diff']:+.2f} ({r['ci_low']:+.2f} to {r['ci_high']:+.2f})"
@@ -132,7 +139,7 @@ def overview():
         "on 2020–2023 (1.05) but trades about 100% of the book per day and ends at −1.14 net; the Transformer "
         "trades about 17% and ends at +0.39.\n"
         "- **The networks hold up better than OU** when costs rise or execution is a day late: move the cost "
-        "slider, or turn on the one-day delay in *Strategies*. At 10 bps only the MLP and Transformer stay above "
+        "slider, switch to realistic costs, or turn on the one-day delay in *Strategies*. At 10 bps only the MLP and Transformer stay above "
         "zero, and only just.\n"
         "- **When the signal broke down in 2024–2025**, every strategy lost money and the networks did no better "
         "than OU (switch the period above).\n"
@@ -152,26 +159,33 @@ def explorer():
         return
     nets = {s: dd.net_returns(returns, s, cost, delay) for s in picks}
     when = ", one day late" if delay else ""
-    lines({s: dd.equity(r) for s, r in nets.items()}, f"Growth of 1, net of {cost} bps{when}", hline=1)
+    lines({s: dd.equity(r) for s, r in nets.items()}, f"Growth of 1, net of {cost.label}{when}", hline=1)
     lines({s: dd.drawdown(r) for s, r in nets.items()}, "Drawdown", percent=True, height=280)
 
     left, right = st.columns(2)
     with left:
-        curve = dd.sharpe_vs_cost(returns, picks, range(0, 31), delay)
+        if cost.realistic:
+            mults = np.arange(0, 3.01, 0.125)
+            curve = dd.sharpe_vs_cost(returns, picks, [dd.Costs(realistic=True, spread_mult=m, borrow=cost.borrow)
+                                                       for m in mults], delay, index=mults)
+            x_now, x_title, title = cost.spread_mult, "spread tier multiplier", f"Net Sharpe vs spread, {cost.borrow:.1%} borrow"
+        else:
+            curve = dd.sharpe_vs_cost(returns, picks, range(0, 31), delay)
+            x_now, x_title, title = cost.bps, "bps per unit traded", "Net Sharpe vs cost"
         fig = go.Figure([go.Scatter(x=curve.index, y=curve[dd.NAMES[s]], name=dd.NAMES[s], mode="lines",
                                     line=dict(color=dd.COLORS[s], width=2.4,
                                               dash="dot" if s in dd.BASELINES else None)) for s in picks])
-        fig.add_vline(x=cost, line_dash="dot", line_color=dd.REFERENCE)
+        fig.add_vline(x=x_now, line_dash="dot", line_color=dd.REFERENCE)
         fig.add_hline(y=0, line_width=1, line_color=dd.REFERENCE)
-        fig.update_xaxes(title="bps per unit traded")
-        finish(fig, "Net Sharpe vs cost", 340)
+        fig.update_xaxes(title=x_title)
+        finish(fig, title, 340, legend_rows=2)
     with right:
         years = dd.sharpe_by_year(returns, picks, cost)
         fig = go.Figure([go.Bar(x=[str(y) for y in years.index], y=years[dd.NAMES[s]], name=dd.NAMES[s],
                                 marker_color=dd.COLORS[s]) for s in picks])
         fig.add_hline(y=0, line_width=1, line_color=dd.REFERENCE)
         fig.update_layout(barmode="group")
-        finish(fig, f"Net Sharpe by year, {cost} bps", 340)
+        finish(fig, f"Net Sharpe by year, {cost.label}", 340, legend_rows=2)
     st.dataframe(style(dd.summary(returns, picks, cost, delay)))
 
 
@@ -365,15 +379,28 @@ nav = st.navigation([
     st.Page(integrity, title="Integrity", icon=":material/verified:", url_path="integrity"),
 ], position="top")
 
-head, period_col, cost_col = st.columns([2.2, 1.6, 2.2], vertical_alignment="center")
+head, period_col, model_col, cost_col = st.columns([1.5, 1.9, 1.3, 2.1], vertical_alignment="center")
 head.markdown("## Sharpee")
 head.caption("Cost-aware deep learning for statistical arbitrage")
 period = period_col.segmented_control("Period", list(dd.PERIODS), default="test", key="period",
-                                      format_func=lambda p: "2020–2023 test" if p == "test" else "2024–2025 holdout")
+                                      format_func=lambda p: "2020–23 test" if p == "test" else "2024–25 holdout")
 period = period or "test"
-cost = cost_col.slider("Cost per unit traded (bps)", 0, 30, 5, key="cost",
-                       help="Costs are linear in traded notional, so every number is recomputed exactly: "
-                            "net = gross − cost × turnover.")
+model = model_col.segmented_control(
+    "Costs", ["flat", "realistic"], default="flat", key="cost_model", format_func=str.capitalize,
+    help="Flat: the same cost on every trade (the pre-registered 5 bps). Realistic: each stock's cost depends on "
+         "its liquidity (3–10 bps by dollar-volume tier) and shorts pay a borrow fee.") or "flat"
+if model == "flat":
+    cost = dd.Costs(bps=cost_col.slider(
+        "Cost per unit traded (bps)", 0, 30, 5, key="cost",
+        help="Costs are linear in traded notional, so every number is recomputed exactly: "
+             "net = gross − cost × turnover."))
+else:
+    mult_col, borrow_col = cost_col.columns([1.4, 1])
+    cost = dd.Costs(realistic=True,
+                    spread_mult=mult_col.slider("Spread tiers ×", 0.0, 3.0, 1.0, 0.25, key="spread_mult",
+                                                help="Scales every tier: 1 = realistic, 2 = stress."),
+                    borrow=borrow_col.selectbox("Borrow, per year", [0.0, 0.005, 0.02], index=1, key="borrow",
+                                                format_func=lambda b: f"{b:.1%}"))
 st.divider()
 
 returns = returns_for(period)
