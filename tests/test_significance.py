@@ -1,8 +1,9 @@
 import numpy as np
 from scipy.stats import norm
 
-from sharpee.evaluation.significance import (dsr, expected_max_sharpe, paired_sharpe_difference, psr,
-                                             stationary_bootstrap_ci)
+from sharpee.evaluation.significance import (bootstrap_sharpe_se, dsr, expected_max_sharpe,
+                                             minimum_detectable, paired_sharpe_difference, psr,
+                                             stationary_bootstrap_ci, years_needed)
 
 
 def test_psr_hand_value():
@@ -49,3 +50,22 @@ def test_paired_difference():
     better = b + 0.002  # same noise, clearly higher mean
     point, lo, hi = paired_sharpe_difference(better, b, n_boot=300)
     assert lo > 0 and lo < point < hi
+
+
+def test_minimum_detectable_hand_values():
+    # (1.959964 + 0.841621) * 0.5 two-sided; (1.644854 + 0.841621) * 0.5 one-sided
+    assert np.isclose(minimum_detectable(0.5), 1.400793, atol=1e-5)
+    assert np.isclose(minimum_detectable(0.5, two_sided=False), 1.243238, atol=1e-5)
+
+
+def test_years_needed_scales_with_inverse_square():
+    mde = minimum_detectable(0.5)
+    assert np.isclose(years_needed(mde, 0.5, 4), 4)
+    assert np.isclose(years_needed(mde / 2, 0.5, 4), 16)
+
+
+def test_bootstrap_se_matches_iid_theory():
+    # iid returns: SE of annualized Sharpe is about sqrt(1 / years); 10 years -> 0.316
+    r = np.random.default_rng(1).normal(0, 0.01, 2520)
+    assert abs(bootstrap_sharpe_se(r, mean_block=1.0) - np.sqrt(0.1)) < 0.04
+    assert bootstrap_sharpe_se(r, r) == 0.0

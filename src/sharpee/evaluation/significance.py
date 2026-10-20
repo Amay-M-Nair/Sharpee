@@ -86,3 +86,31 @@ def paired_sharpe_difference(a, b, n_boot: int = 2000, mean_block: float = 10.0,
     point = (daily_sharpe(a) - daily_sharpe(b)) * np.sqrt(PERIODS)
     lo, hi = np.quantile(diffs, [alpha / 2, 1 - alpha / 2])
     return float(point), float(lo), float(hi)
+
+
+def bootstrap_sharpe_se(a, b=None, n_boot: int = 2000, mean_block: float = 10.0, seed: int = 0) -> float:
+    """Stationary-bootstrap standard error of the annualized Sharpe of a, or of Sharpe(a) - Sharpe(b)
+    when b is given (same resampled days for both, as in paired_sharpe_difference)."""
+    a = np.asarray(a, dtype=np.float64)
+    idx = _stationary_indices(len(a), n_boot, mean_block, np.random.default_rng(seed))
+    stats = _annual_sharpes(a[idx])
+    if b is not None:
+        stats = stats - _annual_sharpes(np.asarray(b, dtype=np.float64)[idx])
+    return float(stats.std(ddof=1))
+
+
+def minimum_detectable(se: float, alpha: float = 0.05, power: float = 0.8, two_sided: bool = True) -> float:
+    """Smallest true effect a z-test with this standard error detects with the given power.
+
+    MDE = (z_{1-alpha/2} + z_{power}) * SE, or z_{1-alpha} for a one-sided test.
+    """
+    z_alpha = norm.ppf(1 - alpha / 2) if two_sided else norm.ppf(1 - alpha)
+    return float((z_alpha + norm.ppf(power)) * se)
+
+
+def years_needed(effect: float, se: float, years: float, alpha: float = 0.05, power: float = 0.8,
+                 two_sided: bool = True) -> float:
+    """Sample length at which `effect` becomes detectable, using SE proportional to 1/sqrt(length)."""
+    if effect == 0:
+        return float("inf")
+    return float(years * (minimum_detectable(se, alpha, power, two_sided) / abs(effect)) ** 2)

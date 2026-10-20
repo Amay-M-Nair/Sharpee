@@ -90,7 +90,7 @@ is penalized directly.
 ## 4. Development: what the checks caught
 
 The pipeline is guarded by a look-ahead test (scramble every price after a cutoff date and assert that
-nothing decided earlier changes), 71 unit tests, and a synthetic sanity check (with planted mean
+nothing decided earlier changes), 74 unit tests, and a synthetic sanity check (with planted mean
 reversion every strategy must win; with pure noise none may). They caught three silent bugs:
 
 1. **NaN training blocks.** Random cut points occasionally produced a 1-day block whose Sharpe is
@@ -241,6 +241,27 @@ remain primary.
   (Transformer −0.83 vs OU −0.79), and their gross Sharpe was negative while OU's was not.
 - **Costs are understated.** A flat 5 bps is optimistic for stocks ranked 150–400 by liquidity, so 10 bps
   is the fairer comparison. There, every strategy is within 0.1 of zero or below it.
+
+## 9c. Power analysis
+
+The minimum detectable effect (MDE) at 80% power comes from the same stationary bootstrap as the intervals.
+Sharpe against zero is one-sided at 5%; paired differences are two-sided at 5%
+(`scripts/power_analysis.py`, full tables in `reports/phase3/power.md` and `reports/n400/phase3/power.md`).
+
+| 2020–2023, net 5 bps | Observed (150 / 400 stocks) | SE | MDE | Years needed for the observed effect |
+|---|---|---|---|---|
+| Transformer Sharpe vs 0 | +0.17 / +0.39 | 0.46–0.50 | 1.16–1.25 | ~180 / ~40 |
+| Transformer minus OU | +0.03 / +0.43 | 0.41–0.47 | 1.16–1.31 | ~10,000 / ~29 |
+| Transformer minus gradient boosting | +1.94 / +1.53 | 0.62–0.78 | 1.74–2.19 | ~5 / ~5 |
+| Transformer minus MLP | +0.02 / −0.01 | 0.10–0.18 | 0.28–0.49 | thousands |
+
+Four test years can only reliably detect a Sharpe of about 1.2 against zero or a gap of about 1.2–1.3 against
+OU, far above plausible after-cost stat-arb edges. The failed rules therefore mean "too small to detect"
+rather than "zero". Because the standard error shrinks with the square root of the sample, more years
+cannot close the gap: even the 400-stock edge over OU would need about 29 years. The networks are 95–98%
+correlated with each other, so they can be compared much more precisely (MDE 0.3–0.5), and the Transformer
+and MLP are still indistinguishable. The gradient-boosting gap is the only effect near the MDE, which is
+why rule 4 is the only rule that passed. The two-year holdout has MDEs of about 1.6–1.9.
 
 ## 10. Limitations
 

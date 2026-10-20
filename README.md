@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c)
-![Tests](https://img.shields.io/badge/tests-71%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 Sharpee asks whether a neural network trained end-to-end on a portfolio's **Sharpe ratio after trading costs** can beat the classic Avellaneda–Lee mean-reversion rule. It removes market and sector moves from S&P 500 stocks with rolling PCA, then trades the leftover residuals with three strategy families:
@@ -50,7 +50,7 @@ Primary universe: the 150 most liquid point-in-time S&P 500 stocks each day. Net
 
 **What the evidence supports**
 
-1. **No reliable edge after costs.** The Transformer, named the primary candidate in advance, fails all three pre-registered rules. Its PSR is 0.64 and its DSR 0.24, both against a 0.95 bar. Its edge over OU is +0.03, with a 95% interval of −0.84 to +0.98.
+1. **No reliable edge after costs.** The Transformer, named the primary candidate in advance, fails all three pre-registered rules. Its PSR is 0.64 and its DSR 0.24, both against a 0.95 bar. Its edge over OU is +0.03, with a 95% interval of −0.84 to +0.98. With four test years the design could only reliably detect a gap of about 1.3 Sharpe ([power analysis](#power-analysis-what-could-this-test-detect)), so this means "too small to see," not "proven zero."
 2. **Costs in the loss work.** The same Transformer trained without costs did worse in every seed (+0.17 vs −0.08 net) and traded about 50% more.
 3. **The learned models are more robust.** OU has the strongest raw signal but needs cheap, immediate execution. The Transformer trades a third less, so it degrades about half as fast as costs rise and barely notices a one-day delay.
 4. **Optimizing the objective beats forecast-then-trade.** Gradient boosting finds more raw signal than the networks (gross Sharpe 0.84 vs 0.51), then loses it by rebuilding the whole book every day. The Transformer beats it by +1.94 (95% CI +0.82 to +3.78), the one pre-registered comparison that passed.
@@ -107,6 +107,24 @@ On the 2018–19 validation years, the Transformer matched OU's gross Sharpe (0.
 | 3. Beats OU (paired bootstrap) | +0.03, 95% CI −0.84 to +0.98 | interval excludes 0 | fail |
 | 4. Beats gradient boosting (amendment) | +1.94, 95% CI +0.82 to +3.78 | interval excludes 0 | **pass** |
 
+### Power analysis: what could this test detect?
+
+"Not significant" only means something once you know how big an effect the test could have found. The minimum detectable effect (MDE) is the smallest true effect the test catches 80% of the time. It's computed from stationary-bootstrap standard errors, so it accounts for fat tails, serial correlation and the correlation between strategies ([`scripts/power_analysis.py`](scripts/power_analysis.py)).
+
+| 2020–2023, net 5 bps | Observed, 150 stocks | Observed, 400 stocks | MDE at 80% power | Years to detect the observed effect |
+|---|---|---|---|---|
+| Transformer Sharpe vs 0 | +0.17 | +0.39 | 1.16–1.25 | ~180 (150 stocks), ~40 (400) |
+| Transformer minus OU | +0.03 | +0.43 | 1.16–1.31 | ~10,000 (150), ~29 (400) |
+| Transformer minus gradient boosting | +1.94 | +1.53 | 1.74–2.19 | ~5 |
+| Transformer minus MLP | +0.02 | −0.01 | 0.28–0.49 | thousands |
+
+- **With four test years, this design can only reliably detect a Sharpe of about 1.2 against zero, or a gap of about 1.2–1.3 against OU.** The realistic edges of stat-arb strategies after costs are well below that, so the failed rules say "too small to see," not "no edge." That's why the verdict is worded "no *reliable* edge."
+- **More years can't fix this.** Even the larger 400-stock gap over OU would need about 29 years to detect. The Sharpe ratio's standard error shrinks only with the square root of the sample length.
+- **The networks can be compared with each other far more precisely.** Their daily returns are 95–98% correlated, so the paired MDE falls to about 0.3–0.5. Yet the Transformer and MLP still come out indistinguishable.
+- **The gradient-boosting comparison was the only one big enough.** That's why rule 4 is the one rule that passed. A gap can reach significance at about 2 standard errors, slightly below the MDE of 2.8.
+
+The years needed assume the observed effect is the true one, which is itself uncertain. Full tables, including the 2024–25 holdout (MDE about 1.6–1.9 over two years): [150 stocks](reports/phase3/power.md) · [400 stocks](reports/n400/phase3/power.md).
+
 ## Robustness: a 400-stock universe
 
 The same study was rerun on the 400 most liquid stocks each day. They were chosen point-in-time with the same filters, with delisted names kept. Every hyperparameter stayed frozen from the 150-stock tuning; only the networks were retrained.
@@ -133,12 +151,12 @@ Results are in [`reports/n400/phase3/`](reports/n400/phase3/).
 
 - **Look-ahead test:** scramble every price after a cutoff date, rebuild the whole pipeline, and assert that every residual, signal, weight and model score on or before the cutoff is unchanged.
 - **Synthetic sanity check:** with planted mean reversion, OU and all three networks must win (net Sharpe +19 to +22). With random-walk residuals, none may earn anything.
-- **71 unit tests:**
+- **74 unit tests:**
   - hand-worked P&L, cost and timing examples;
   - the residual identity `wᵀ(ΦR) = (Φᵀw)ᵀR`;
   - eligibility rules and factor-neutral capping;
   - the loss and its gradients;
-  - PSR, DSR and bootstrap intervals against hand-computed values;
+  - PSR, DSR, bootstrap intervals and power calculations against hand-computed values;
   - the dashboard's numbers against the official results.
 
 **What the checks caught.** Each fix has a regression test, and affected runs were excluded from the trial log.
@@ -173,7 +191,7 @@ Python 3.10+, in a virtual environment. A CUDA GPU is optional; a 4 GB card is e
 ```bash
 pip install -r requirements.txt
 pip install -e .
-pytest                                                  # 71 tests
+pytest                                                  # 74 tests
 ```
 
 Reproduce the study:
@@ -212,7 +230,7 @@ src/sharpee/
   evaluation/     metrics, walk-forward folds, significance tests, strategy books
 notebooks/        01 data, 02 residuals, 03 training, 04 results (outputs saved)
 scripts/          command-line entry points for every step
-tests/            71 tests, including the look-ahead test
+tests/            74 tests, including the look-ahead test
 reports/          research report, findings write-up, figures, results; n400/ for the 400-stock run and dashboard data
 ```
 
@@ -225,11 +243,11 @@ reports/          research report, findings write-up, figures, results; n400/ fo
 - [x] Pre-registered walk-forward test, significance tests, cost and delay sensitivity, costs-in-loss ablation, one-shot holdout
 - [x] Ridge and gradient-boosting baselines (pre-registered amendment)
 - [x] 400-stock robustness check
+- [x] [Power analysis](#power-analysis-what-could-this-test-detect): the smallest Sharpe and Sharpe difference the design can detect
 - [x] Interactive dashboard and research report
 
 **Next**
 
-- [ ] **Power analysis.** State the smallest Sharpe difference this design can detect with four test years. That turns "not significant" into a precise statement of what the test can and cannot see.
 - [ ] **Borrow fees and per-stock spreads, at evaluation only.** Charge an annual borrow rate on short notional, with a stress case, and per-stock spreads by liquidity tier (trailing dollar volume, no look-ahead). The saved model scores are reused, so no retraining is needed. This fixes the main weakness of the 400-stock run.
 - [ ] **Live paper trading.** A daily GitHub Actions job runs the frozen models after the close and records an out-of-sample track record, with MLflow experiment tracking.
 
