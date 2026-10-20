@@ -7,6 +7,7 @@ name = "sharpee"
 version = "0.1.0"
 description = "Cost-aware deep learning for statistical arbitrage"
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
     "torch",
